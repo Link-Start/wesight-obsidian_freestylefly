@@ -13,6 +13,11 @@ import { KnowledgeBrain } from './knowledgeBrain/service';
 import { KnowledgeBrainEntitlementService } from './knowledgeBrain/entitlement';
 import { KnowledgeBrainAccessModal } from './knowledgeBrain/accessModal';
 import { ProviderStore } from './storage/providerStore';
+import { TokenDanceService } from './tokendance/service';
+import { MemberAiService } from './memberAi/service';
+import { ClaudeInstaller } from './memberAi/installer';
+import { confirmMemberAiDisclosure } from './memberAi/disclosure';
+import { memberAiConfigSources } from './memberAi/settings';
 import { getVaultBasePath } from './utils/vault';
 import { KnowledgePreviewModal } from './knowledgeBrain/previewModal';
 import { KnowledgeHealthModal } from './knowledgeBrain/healthModal';
@@ -68,6 +73,9 @@ interface AppWithSettings extends App {
 export default class WeSightPlugin extends Plugin {
   settings!: WeSightObsidianSettings;
   providerStore!: ProviderStore;
+  tokenDance!: TokenDanceService;
+  memberAi!: MemberAiService;
+  claudeInstaller!: ClaudeInstaller;
   vaultStore!: VaultStore;
   runtimeManager!: RuntimeManager;
   cloudAuth!: CloudAuthService;
@@ -106,9 +114,19 @@ export default class WeSightPlugin extends Plugin {
     });
     this.register(this.updateService.onChange(state => this.handleUpdateStateChange(state)));
     this.providerStore = new ProviderStore(this.app.secretStorage);
+    this.tokenDance = new TokenDanceService({
+      secrets: this.app.secretStorage,
+      openExternal: url => { window.open(url, '_blank', 'noopener,noreferrer'); },
+    });
     this.vaultStore = new VaultStore(this.app.vault.adapter);
-    this.runtimeManager = new RuntimeManager(this.providerStore, () => this.settings);
     this.cloudAuth = new CloudAuthService(this.app);
+    this.memberAi = new MemberAiService({auth:this.cloudAuth,confirmDisclosure:async userId=>{
+      if(this.settings.memberAiConsentUserId===userId)return true;
+      if(!(await confirmMemberAiDisclosure(this.app)))return false;
+      this.settings.memberAiConsentUserId=userId;await this.saveData(this.settings);return true;
+    }});
+    this.claudeInstaller = new ClaudeInstaller(()=>this.settings,()=>this.saveSettings());
+    this.runtimeManager = new RuntimeManager(this.providerStore, () => this.settings, this.tokenDance, this.memberAi);
     this.knowledgeBrainEntitlement = new KnowledgeBrainEntitlementService(
       this.cloudAuth,
       this.app.secretStorage,
@@ -154,6 +172,9 @@ export default class WeSightPlugin extends Plugin {
       (file) => this.activateWeChatArticleStats(file),
     );
     this.knowledgeBrain = new KnowledgeBrain({
+      getRuntimeConfig: agentId => this.settings.configSources[agentId] === 'wesightManaged'
+        ? { configSource: 'wesightManaged', model: this.settings.memberAiModel || undefined }
+        : { configSource: 'localCli' },
       getVaultPath: () => getVaultBasePath(this.app),
       getMaxContextChars: () => this.settings.maxContextFileChars,
       runtimeManager: this.runtimeManager,
@@ -178,6 +199,8 @@ export default class WeSightPlugin extends Plugin {
         knowledgeBrainEntitlement: this.knowledgeBrainEntitlement,
         updateService: this.updateService,
         auth: this.cloudAuth,
+        memberAi: this.memberAi,
+        claudeInstaller: this.claudeInstaller,
         openSettings: () => this.openSettings(),
         openImageTextWorkbench: (file: TFile) => this.activateXiaohongshuWorkbench(file),
         openWeChatPreview: (file?: TFile) => {
@@ -391,6 +414,9 @@ export default class WeSightPlugin extends Plugin {
     this.registerEvent(this.app.workspace.on('file-open', () => this.installMarkdownShareActions()));
 
     this.settingTab = new WeSightSettingTab(this.app, this, {
+      tokenDance: this.tokenDance,
+      memberAi: this.memberAi,
+      claudeInstaller: this.claudeInstaller,
       getSettings: () => this.settings,
       saveSettings: () => this.saveSettings(),
       providerStore: this.providerStore,
@@ -405,6 +431,9 @@ export default class WeSightPlugin extends Plugin {
   }
 
   override onunload(): void {
+    this.memberAi?.close();
+    this.claudeInstaller?.cancel();
+    this.tokenDance?.close();
     this.sharePopover?.close();
     void this.multiPublishBridge?.stop();
     void this.runtimeManager?.shutdown();
@@ -683,12 +712,9 @@ function normalizeSettings(value: Partial<WeSightObsidianSettings> | null | unde
     lastNotifiedUpdateVersion: typeof value?.lastNotifiedUpdateVersion === 'string'
       ? value.lastNotifiedUpdateVersion
       : '',
-    configSources: {
-      ...DEFAULT_SETTINGS.configSources,
-      ...(value?.configSources ?? {}),
-      // Codex 仅支持本机配置，旧供应商设置继续保留在存储中。
-      codex: 'localCli',
-    },
+    configSources: memberAiConfigSources(value),
+    memberAiModel: typeof value?.memberAiModel === 'string' ? value.memberAiModel : '',
+    memberAiConsentUserId: typeof value?.memberAiConsentUserId === 'string' ? value.memberAiConsentUserId : '',
     configuredPaths: {
       ...DEFAULT_SETTINGS.configuredPaths,
       ...(value?.configuredPaths ?? {}),

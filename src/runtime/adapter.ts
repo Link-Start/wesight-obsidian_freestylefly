@@ -5,6 +5,7 @@ import type { AgentId, ChatTurnRequest, ProviderProfile, RuntimeTurnEvent } from
 import { mergeEnvironment } from '../utils/env';
 import { appendAttachmentContext } from './attachmentContext';
 import { prepareProviderProjection } from './providerProjection';
+import { managedProjection } from '../memberAi/projection';
 import {
   parseClaudeStreamLine,
   parseOpenCodeStreamLine,
@@ -46,7 +47,9 @@ export class AgentAdapter extends EventEmitter {
       return Promise.resolve();
     }
     const baseEnv = mergeEnvironment(process.env, this.options.sharedEnvironmentVariables);
-    const projection = request.configSource === 'providerProfile'
+    const projection = request.configSource === 'wesightManaged'
+      ? managedProjection(this.options.providerProfile, baseEnv)
+      : request.configSource !== 'localCli'
       ? prepareProviderProjection(this.options.agentId, this.options.providerProfile, baseEnv)
       : prepareProviderProjection(this.options.agentId, null, baseEnv);
     const prompt = buildEffectivePrompt(request, this.options.agentId);
@@ -175,6 +178,7 @@ export class AgentAdapter extends EventEmitter {
         '--verbose',
         '--include-partial-messages',
       ];
+      args.push(...providerArgs);
       if (request.textOnly) {
         args.push(
           '--safe-mode',
@@ -201,7 +205,7 @@ export class AgentAdapter extends EventEmitter {
           request.systemPrompt?.trim() || 'Read only. Do not modify files or execute commands.',
         );
       }
-      const model = request.configSource === 'providerProfile'
+      const model = request.configSource !== 'localCli'
         ? this.options.providerProfile?.defaultModel || this.options.providerProfile?.model
         : request.model;
       if (model?.trim()) {

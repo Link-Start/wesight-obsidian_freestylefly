@@ -56,7 +56,7 @@ export async function runInlineEdit(
     cwd: vaultBasePath,
     configSource: settings.configSources[agentId],
     providerProfileId: settings.providerProfileByAgent[agentId],
-    model: settings.localModelByAgent[agentId],
+    model: settings.configSources[agentId] === 'wesightManaged' ? settings.memberAiModel : settings.localModelByAgent[agentId],
     systemPrompt: settings.systemPrompt,
     planMode: false,
     attachments: [],

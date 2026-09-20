@@ -296,7 +296,7 @@ export class XiaohongshuGenerationService {
         cwd: runDir,
         configSource: settings.configSources[agentId],
         providerProfileId: settings.providerProfileByAgent[agentId] || undefined,
-        model: settings.localModelByAgent[agentId] || undefined,
+        model: (settings.configSources[agentId] === 'wesightManaged' ? settings.memberAiModel : settings.localModelByAgent[agentId]) || undefined,
         planMode: false,
         textOnly: true,
         accessMode: 'read-only',

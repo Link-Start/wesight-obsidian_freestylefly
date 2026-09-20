@@ -51,10 +51,12 @@ import {
   type KnowledgeDraftV1,
 } from './transactionBuilder';
 import type { RuntimeManager } from '../runtime/runtimeManager';
+import type { ChatTurnRequest } from '../types';
 import { appendLocalLog } from '../storage/localLog';
 import { wesightHome } from '../paths';
 
 interface ServiceDeps {
+  getRuntimeConfig?: (agentId: KnowledgeBrainAgentId) => Partial<Pick<ChatTurnRequest, 'configSource' | 'model' | 'providerProfileId'>>;
   getVaultPath: () => string | null;
   getMaxContextChars?: () => number;
   runtimeManager: RuntimeManager;
@@ -477,6 +479,7 @@ export class KnowledgeBrain extends EventEmitter implements KnowledgeBrainServic
         cwd: vault,
         sessionId: input.sessionId,
         signal: queryAbort.signal,
+        config: { ...this.deps.getRuntimeConfig?.(input.agentId), ...(input.managedModel ? { model: input.managedModel } : {}) },
       }, event => {
         if (event.type === 'session') onEvent({ type: 'session', sessionId: event.sessionId });
         else if (event.type === 'text') chunks.push(event.content);
@@ -566,7 +569,7 @@ export class KnowledgeBrain extends EventEmitter implements KnowledgeBrainServic
         const retryPrompt = attempt === 0
           ? prompt
           : `${prompt}\n\nPrevious draft failed host validation:\n${validationDetail}\nReturn one corrected bounded draft and preserve the exact requested scope.`;
-        const result = await runPlanningTurn(this.deps.runtimeManager, agentId, systemPrompt, retryPrompt, vault, signal);
+        const result = await runPlanningTurn(this.deps.runtimeManager, agentId, systemPrompt, retryPrompt, vault, signal, this.deps.getRuntimeConfig?.(agentId));
         const draft = parseKnowledgeDraft(result.text, operationType);
         normalize?.(draft);
         return await this.createPreview(record, vault, draft, signal);

@@ -375,7 +375,7 @@ function generatorSignature(
     `prompt-v${THEME_GENERATION_PROMPT_VERSION}`,
     agentId,
     source,
-    settings.localModelByAgent[agentId] || 'default',
+    (source === 'wesightManaged' ? settings.memberAiModel : settings.localModelByAgent[agentId]) || 'default',
   ].join(':');
 }
 
@@ -626,7 +626,7 @@ export class WeChatThemeService {
         cwd: runDir,
         configSource: settings.configSources[agentId],
         providerProfileId: settings.providerProfileByAgent[agentId] || undefined,
-        model: settings.localModelByAgent[agentId] || undefined,
+        model: (settings.configSources[agentId] === 'wesightManaged' ? settings.memberAiModel : settings.localModelByAgent[agentId]) || undefined,
         planMode: false,
         textOnly: true,
         signal: options.signal,

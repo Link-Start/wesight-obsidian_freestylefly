@@ -3,7 +3,7 @@ import type { MultiPlatformId, MultiPublishPairing } from './multiPublish/types'
 
 export type AgentId = 'claude' | 'codex' | 'opencode';
 
-export type RuntimeConfigSource = 'localCli' | 'providerProfile';
+export type RuntimeConfigSource = 'localCli' | 'providerProfile' | 'wesightManaged';
 
 export type RuntimeAccessMode = 'read-only' | 'workspace-write';
 
@@ -265,6 +265,7 @@ export interface CodexRuntimeStatus {
 }
 
 export interface StoredConversation {
+  managedModel?: string;
   id: string;
   title: string;
   agentId: AgentId;
@@ -285,6 +286,8 @@ export type ProfileSelectionByAgent = Record<AgentId, string>;
 export type LocalModelByAgent = Record<AgentId, string>;
 
 export interface WeSightObsidianSettings {
+  memberAiModel: string;
+  memberAiConsentUserId: string;
   defaultAgentId: AgentId;
   /** Latest plugin version already announced in this vault. */
   lastNotifiedUpdateVersion?: string;
@@ -312,7 +315,7 @@ wechatCustomThemeDescription: string;
 }
 
 export const DEFAULT_CONFIG_SOURCES: ConfigSourcesByAgent = {
-  claude: 'localCli',
+  claude: 'wesightManaged',
   codex: 'localCli',
   opencode: 'localCli',
 };
@@ -336,6 +339,8 @@ export const DEFAULT_LOCAL_MODELS: LocalModelByAgent = {
 };
 
 export const DEFAULT_SETTINGS: WeSightObsidianSettings = {
+  memberAiModel: '',
+  memberAiConsentUserId: '',
   defaultAgentId: 'claude',
   lastNotifiedUpdateVersion: '',
   configSources: DEFAULT_CONFIG_SOURCES,

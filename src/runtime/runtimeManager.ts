@@ -13,6 +13,8 @@ import { RuntimeDiscovery } from './discovery';
 import { AgentAdapter } from './adapter';
 import { mergeEnvironment } from '../utils/env';
 import { CodexAppServerRuntime } from './codexRuntime';
+import { isTokenDanceProfile, type TokenDanceService } from '../tokendance/service';
+import type { MemberAiService } from '../memberAi/service';
 
 export type RuntimeEventListener = (event: RuntimeTurnEvent) => void;
 
@@ -26,6 +28,8 @@ export class RuntimeManager {
   constructor(
     private readonly providerStore: ProviderStore,
     private getSettings: () => WeSightObsidianSettings,
+    private readonly tokenDance?: TokenDanceService,
+    private readonly memberAi?: MemberAiService,
   ) {}
 
   resolveStatus(request: ChatTurnRequest): AgentStatus {
@@ -68,7 +72,7 @@ export class RuntimeManager {
    * output.
    */
   async runTurn(request: ChatTurnRequest, onEvent: RuntimeEventListener): Promise<void> {
-    const logRuntime = request.logPolicy !== 'metadata-only';
+    const logRuntime = request.logPolicy !== 'metadata-only' && request.configSource !== 'wesightManaged';
     const deliver = (event: RuntimeTurnEvent): void => {
       if (event.type === 'error') {
         if (event.providerProfileId && event.retryAfterSeconds) {
@@ -182,11 +186,29 @@ export class RuntimeManager {
       }
       this.cooldownByProfile.delete(profile.id);
     }
+    let runtimeProfile = profile;
+    if (request.configSource === 'wesightManaged') {
+      try {
+        if(request.agentId!=='claude'||!this.memberAi)throw new Error('会员模型仅支持 Claude Code。');
+        runtimeProfile=await this.memberAi.runtimeProfile(request.model||settings.memberAiModel);
+      }catch(error){deliver({type:'error',message:error instanceof Error?error.message:'会员模型不可用'});deliver({type:'done'});return;}
+      if(request.signal?.aborted){deliver({type:'done'});return;}
+    } else if (isTokenDanceProfile(profile)) {
+      try {
+        if (!this.tokenDance || request.agentId !== 'claude') throw new Error('TokenDance 请通过 Claude 模型设置连接。');
+        runtimeProfile = await this.tokenDance.runtimeProfile(profile!);
+      } catch (error) {
+        deliver({ type: 'error', message: error instanceof Error ? error.message : 'TokenDance 连接失败。', providerProfileId: profile?.id });
+        deliver({ type: 'done' });
+        return;
+      }
+      if (request.signal?.aborted) { deliver({ type: 'done' }); return; }
+    }
     const adapter = new AgentAdapter({
       agentId: request.agentId,
       binaryPath: status.binaryPath,
       sharedEnvironmentVariables: settings.sharedEnvironmentVariables,
-      providerProfile: profile,
+      providerProfile: runtimeProfile,
     });
     const cancelAdapter = (): void => adapter.cancel();
     request.signal?.addEventListener('abort', cancelAdapter, { once: true });

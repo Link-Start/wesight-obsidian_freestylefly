@@ -2230,6 +2230,20 @@ button.wesight-provider-icon-btn svg {
   background: var(--background-modifier-hover);
 }
 
+.wesight-tokendance-settings .wesight-provider-model-card {
+  grid-template-columns: 8px minmax(0, 1fr);
+}
+
+.wesight-tokendance-settings .wesight-provider-test-row {
+  flex-wrap: wrap;
+}
+
+.wesight-tokendance-settings select {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+}
+
 .wesight-provider-model-card.is-selected {
   border-color: #3b82f6;
   box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.22);
@@ -9704,3 +9718,18 @@ body.theme-dark .wesight-wechat-publish-button {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.wesight-member-ai-card {
+  margin: 8px 0;
+  padding: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
+  max-height: 300px;
+  overflow: auto;
+  font-size: var(--font-ui-small);
+}
+.wesight-member-ai-card h4 { margin: 0 0 8px; }
+.wesight-member-ai-card p { margin: 6px 0; }
+.wesight-member-ai-card button { margin: 4px 6px 4px 0; }
+.wesight-member-ai-card progress { width: 100%; accent-color: var(--interactive-accent); }
+.wesight-member-ai-card select { max-width: 100%; }

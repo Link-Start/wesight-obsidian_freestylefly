@@ -352,7 +352,7 @@ describe('WeChat theme Skill discovery and generation', () => {
     await service.generate(makeSnapshot('snapshot-v2'), 'moyu-green');
     expect(runTurn).toHaveBeenCalledTimes(2);
 
-    settings.localModelByAgent = { ...settings.localModelByAgent, claude: 'sonnet' };
+    settings.memberAiModel = 'glm-5.3';
     await service.generate(makeSnapshot('snapshot-v2'), 'moyu-green');
     expect(runTurn).toHaveBeenCalledTimes(3);
 

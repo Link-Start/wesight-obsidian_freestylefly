@@ -17,6 +17,7 @@ export async function runPlanningTurn(
   prompt: string,
   cwd: string,
   signal: AbortSignal | null,
+  config: Partial<Pick<ChatTurnRequest, 'configSource' | 'model' | 'providerProfileId'>> = {},
 ): Promise<PlanningResult> {
   const chunks: string[] = [];
   let bytes = 0;
@@ -37,6 +38,7 @@ export async function runPlanningTurn(
     prompt,
     cwd,
     configSource: 'localCli',
+    ...config,
     systemPrompt,
     textOnly: true,
     accessMode: 'read-only',
@@ -82,6 +84,7 @@ export async function runQueryTurn(
     cwd: string;
     sessionId?: string;
     signal: AbortSignal | null;
+    config?: Partial<Pick<ChatTurnRequest, 'configSource' | 'model' | 'providerProfileId'>>;
   },
   onEvent: (event: RuntimeTurnEvent) => void,
 ): Promise<void> {
@@ -91,6 +94,7 @@ export async function runQueryTurn(
     prompt: input.prompt,
     cwd: input.cwd,
     configSource: 'localCli',
+    ...input.config,
     systemPrompt: input.systemPrompt,
     sessionId: input.sessionId,
     accessMode: 'read-only',

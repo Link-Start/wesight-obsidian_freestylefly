@@ -27,8 +27,17 @@ import type { KnowledgeBrainAccessStatus } from '../knowledgeBrain/types';
 import { KnowledgeHealthModal, KnowledgeRecoveryModal } from '../knowledgeBrain/healthModal';
 import { WeChatPublishingSettings } from './wechatPublishingSettings';
 import { initializeStoredSecretInput, resolveSecretInput } from './secretInput';
+import { TOKEN_DANCE, TOKEN_DANCE_MODELS } from '../tokendance/catalog';
+import type { TokenDanceService } from '../tokendance/service';
+import { renderTokenDanceSettings } from './tokenDanceSettings';
+import type { MemberAiService } from '../memberAi/service';
+import type { ClaudeInstaller } from '../memberAi/installer';
+import { renderMemberAiCard } from './memberAiCard';
 
 interface SettingsTabDeps {
+  memberAi: MemberAiService;
+  claudeInstaller: ClaudeInstaller;
+  tokenDance: TokenDanceService;
   getSettings: () => WeSightObsidianSettings;
   saveSettings: () => Promise<void>;
   providerStore: ProviderStore;
@@ -72,6 +81,16 @@ interface ProviderPreset {
 }
 
 const PROVIDER_PRESETS: ProviderPreset[] = [
+  {
+    key: 'tokendance',
+    label: TOKEN_DANCE.name,
+    iconText: 'T',
+    accent: '#6366f1',
+    defaultApiFormat: 'anthropic',
+    baseUrls: { anthropic: TOKEN_DANCE.baseUrl, openai: '' },
+    models: TOKEN_DANCE_MODELS,
+    anthropicAuthMode: 'authToken',
+  },
   {
     key: 'openai',
     label: 'OpenAI',
@@ -219,7 +238,8 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
 export class WeSightSettingTab extends PluginSettingTab {
   private editingProfileId: string | null = null;
   private activeTab: SettingsTabId = 'general';
-  private selectedProviderKey = 'deepseek';
+  private selectedProviderKey = 'tokendance';
+  private disposeMemberCard?: () => void;
   private readonly publishingSettings: WeChatPublishingSettings;
   private knowledgeStatusListener: ((event: { message?: string }) => void) | null = null;
 
@@ -250,6 +270,7 @@ export class WeSightSettingTab extends PluginSettingTab {
   }
 
   override display(): void {
+    this.disposeMemberCard?.();this.disposeMemberCard=undefined;
     if (this.knowledgeStatusListener) {
       this.deps.knowledgeBrain.off('status', this.knowledgeStatusListener);
       this.knowledgeStatusListener = null;
@@ -267,11 +288,12 @@ export class WeSightSettingTab extends PluginSettingTab {
       this.renderKnowledgeBrainCard(panel);
       return;
     }
+    this.renderProfiles(panel, this.activeTab);
     this.renderAgentSettings(panel, this.activeTab);
-    if (this.activeTab !== 'codex') this.renderProfiles(panel, this.activeTab);
   }
 
   override hide(): void {
+    this.disposeMemberCard?.();this.disposeMemberCard=undefined;
     if (this.knowledgeStatusListener) {
       this.deps.knowledgeBrain.off('status', this.knowledgeStatusListener);
       this.knowledgeStatusListener = null;
@@ -476,10 +498,11 @@ export class WeSightSettingTab extends PluginSettingTab {
     const configSourceSetting = new Setting(section)
       .setName('Config source')
       .addDropdown(dropdown => {
+        if(agentId==='claude')dropdown.addOption('wesightManaged','默认配置（推荐）');
         dropdown.addOption('localCli', '本地模式');
         dropdown.addOption(
           'providerProfile',
-          agentId === 'codex' ? 'WeSight 模式（不可用）' : 'WeSight 模式',
+          agentId === 'codex' ? 'WeSight 模式（不可用）' : '自定义配置',
         );
         if (agentId === 'codex') {
           // Codex 暂时仅支持本机配置，保留 WeSight 模式入口但提示支持中。
@@ -495,8 +518,10 @@ export class WeSightSettingTab extends PluginSettingTab {
             }
             await this.deps.saveSettings();
             this.deps.refreshViews();
+            this.display();
           });
       });
+    if(agentId==='claude')configSourceSetting.settingEl.hide();
     if (agentId === 'codex') {
       configSourceSetting.setDesc(
         'Codex 当前仅支持本机模式，自动复用官方 ChatGPT / Codex 桌面应用内置的 Codex CLI；WeSight 模式不可用。',
@@ -518,51 +543,53 @@ export class WeSightSettingTab extends PluginSettingTab {
       });
 
     this.renderSkills(section, agentId);
+  }
 
-    if (agentId === 'codex') {
-      const codexStatus = this.deps.runtimeManager.getCodexStatus();
-      const modelLabel = codexStatus.currentModel?.displayName ?? codexStatus.currentModelId ?? '等待 Codex App 返回';
-      const statusText = codexStatus.state === 'ready'
-        ? codexStatus.authenticated === false
-          ? '已连接，Codex 尚未登录。请在 Codex App 或 CLI 中完成登录。'
-          : `已连接 · ${modelLabel}`
-        : codexStatus.state === 'connecting'
-          ? '正在连接 Codex App Server…'
-          : codexStatus.state === 'error'
-            ? `连接失败：${codexStatus.error ?? '未知错误'}`
-            : '尚未连接';
-      new Setting(section)
-        .setName('Codex app server')
-        .setDesc(statusText)
-        .addButton(button => button
-          .setButtonText('刷新状态')
-          .onClick(async () => {
-            button.setDisabled(true);
-            await this.deps.runtimeManager.refreshCodexStatus();
-            this.display();
-          }));
-      new Setting(section)
-        .setName('当前模型')
-        .setDesc('模型来自本机 Codex 配置，WeSight 仅展示读取结果。')
-        .addText(text => {
-          text.setValue(modelLabel);
-          text.inputEl.disabled = true;
-        });
-      new Setting(section)
-        .setName('图片生成')
-        .setDesc(codexStatus.imageGeneration === false
-          ? '当前模型或供应商未提供图片生成，普通聊天仍可使用。'
-          : codexStatus.imageGeneration === true
-            ? '可用，生成结果会保存到 Vault。'
-            : '能力状态尚未返回。');
-      if (codexStatus.state === 'idle') {
-        void this.deps.runtimeManager.refreshCodexStatus().then(() => {
-          if (this.activeTab === 'codex') this.display();
-        });
-      }
-      return;
+  private renderCodexModelSettings(section: HTMLElement): void {
+    const codexStatus = this.deps.runtimeManager.getCodexStatus();
+    const modelLabel = codexStatus.currentModel?.displayName ?? codexStatus.currentModelId ?? '等待 Codex App 返回';
+    const statusText = codexStatus.state === 'ready'
+      ? codexStatus.authenticated === false
+        ? '已连接，Codex 尚未登录。请在 Codex App 或 CLI 中完成登录。'
+        : `已连接 · ${modelLabel}`
+      : codexStatus.state === 'connecting'
+        ? '正在连接 Codex App Server…'
+        : codexStatus.state === 'error'
+          ? `连接失败：${codexStatus.error ?? '未知错误'}`
+          : '尚未连接';
+    new Setting(section)
+      .setName('Codex app server')
+      .setDesc(statusText)
+      .addButton(button => button
+        .setButtonText('刷新状态')
+        .onClick(async () => {
+          button.setDisabled(true);
+          await this.deps.runtimeManager.refreshCodexStatus();
+          this.display();
+        }));
+    new Setting(section)
+      .setName('当前模型')
+      .setDesc('模型来自本机 Codex 配置，WeSight 仅展示读取结果。')
+      .addText(text => {
+        text.setValue(modelLabel);
+        text.inputEl.disabled = true;
+      });
+    new Setting(section)
+      .setName('图片生成')
+      .setDesc(codexStatus.imageGeneration === false
+        ? '当前模型或供应商未提供图片生成，普通聊天仍可使用。'
+        : codexStatus.imageGeneration === true
+          ? '可用，生成结果会保存到 Vault。'
+          : '能力状态尚未返回。');
+    if (codexStatus.state === 'idle') {
+      void this.deps.runtimeManager.refreshCodexStatus().then(() => {
+        if (this.activeTab === 'codex') this.display();
+      });
     }
+  }
 
+  private renderLocalModelSetting(section: HTMLElement, agentId: AgentId): void {
+    const settings = this.deps.getSettings();
     new Setting(section)
       .setName('Local model')
       .setDesc('Optional model override for local CLI runs. Empty follows the CLI config.')
@@ -583,7 +610,26 @@ export class WeSightSettingTab extends PluginSettingTab {
     new Setting(section)
       .setName(agentFilter ? `${getAgentDescriptor(agentFilter).shortName} 模型配置` : '模型')
       .setHeading();
+    if(agentFilter==='claude'){
+      const settings=this.deps.getSettings();
+      new Setting(section).setName('配置来源').addDropdown(d=>d.addOption('wesightManaged','默认配置（推荐）')
+        .addOption('providerProfile','自定义配置').addOption('localCli','本地配置').setValue(settings.configSources.claude)
+        .onChange(async value=>{settings.configSources.claude=value as RuntimeConfigSource;await this.deps.saveSettings();this.display();}));
+      if(settings.configSources.claude==='wesightManaged'){
+        this.disposeMemberCard=renderMemberAiCard(section,{service:this.deps.memberAi,installer:this.deps.claudeInstaller,auth:this.deps.cloudAuth,
+          getSettings:()=>this.deps.getSettings(),selectedModel:()=>settings.memberAiModel,
+          selectModel:async id=>{settings.memberAiModel=id;await this.deps.saveSettings();},
+          switchCustom:async()=>{settings.configSources.claude='providerProfile';await this.deps.saveSettings();this.display();}});
+        return;
+      }
+      if(settings.configSources.claude==='localCli'){this.renderLocalModelSetting(section,'claude');return;}
+    }
+    if (agentFilter === 'codex') {
+      this.renderCodexModelSettings(section);
+      return;
+    }
     this.renderProviderConsole(section, agentFilter);
+    if (agentFilter) this.renderLocalModelSetting(section, agentFilter);
   }
 
   private renderProviderConsole(section: HTMLElement, agentFilter?: AgentId): void {
@@ -638,6 +684,27 @@ export class WeSightSettingTab extends PluginSettingTab {
     }
 
     const detail = consoleEl.createDiv({ cls: 'wesight-provider-detail' });
+    if (preset.key === 'tokendance') {
+      renderTokenDanceSettings(detail, {
+        service: this.deps.tokenDance,
+        profile: this.findPresetProfile(preset, 'claude'),
+        onSave: async model => {
+          const existing = this.findPresetProfile(preset, 'claude');
+          const profile = this.deps.providerStore.save({
+            id: existing?.id, agentId: 'claude', name: TOKEN_DANCE.name,
+            apiKey: TOKEN_DANCE.credentialRef, baseUrl: TOKEN_DANCE.baseUrl,
+            defaultModel: model, models: this.deps.tokenDance.models.map(item => item.id),
+            anthropicAuthMode: 'authToken', isDefault: true,
+          });
+          const settings = this.deps.getSettings();
+          settings.providerProfileByAgent.claude = profile.id;
+          settings.configSources.claude = 'providerProfile';
+          await this.deps.saveSettings();
+          this.deps.refreshViews();
+        },
+      });
+      return;
+    }
     const detailHead = detail.createDiv({ cls: 'wesight-provider-detail-head' });
     const titleWrap = detailHead.createDiv({ cls: 'wesight-provider-title-wrap' });
     const titleIcon = titleWrap.createSpan({ cls: 'wesight-provider-icon large', text: preset.iconText });
@@ -1404,7 +1471,7 @@ export class WeSightSettingTab extends PluginSettingTab {
     section.createEl('p', { text: `Vault conversations: ${this.app.vault.getName()}/.wesight/` });
     section.createEl('p', { text: `Global home: ${wesightHome()}` });
     section.createEl('p', { text: `Provider profiles: ${providersPath()}` });
-    section.createEl('p', { text: 'Runtime executables: detected only; WeSight does not install or update them.' });
+    section.createEl('p', { text: '运行环境：优先复用已有安装。Claude Code 可在“默认配置（推荐）”中点击“一键安装”，由官方安装程序完成安装。' });
     section.createEl('p', { text: `Temporary runtime config: ${tmpDir()}` });
     section.createEl('p', { text: `Logs: ${logsDir()}` });
   }

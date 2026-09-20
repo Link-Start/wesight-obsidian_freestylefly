@@ -33,6 +33,10 @@ import { filterSlashCommands, loadChatSkills, type SlashCommand } from '../utils
 import { getVaultBasePath, resolveVaultAbsolutePath, guessMimeType } from '../utils/vault';
 import { RuntimeDiscovery } from '../runtime/discovery';
 import { RuntimeManager } from '../runtime/runtimeManager';
+import { isTokenDanceProfile } from '../tokendance/service';
+import type { MemberAiService } from '../memberAi/service';
+import type { ClaudeInstaller } from '../memberAi/installer';
+import { renderMemberAiCard } from './memberAiCard';
 import { getClaudeDetectedLocalModel, listLocalModels } from '../runtime/localModels';
 import type { UpdateService, UpdateState } from '../update/updateService';
 import { RuntimeSetupModal } from './runtimeSetupModal';
@@ -55,6 +59,8 @@ const WESIGHT_TUTORIAL_URL =
   'https://my.feishu.cn/docx/Vy7wdUzhkoZpPhxgix4cYHELnie?from=from_copylink';
 
 export interface ChatViewDeps {
+  memberAi: MemberAiService;
+  claudeInstaller: ClaudeInstaller;
   getSettings: () => WeSightObsidianSettings;
   saveSettings: () => Promise<void>;
   providerStore: ProviderStore;
@@ -83,6 +89,10 @@ interface ActiveEditorContext {
 
 export class WeSightChatView extends ItemView {
   private conversation: StoredConversation | null = null;
+  private async persistConversation(): Promise<void> {
+    if(this.conversation?.messages.length)await this.deps.vaultStore.replaceConversation(this.conversation);
+  }
+  private disposeMemberCard?:()=>void;
   private agentId: AgentId = 'claude';
   private planMode = false;
   private conversationMode: ConversationMode = 'chat';
@@ -210,6 +220,7 @@ export class WeSightChatView extends ItemView {
   }
 
   override async onClose(): Promise<void> {
+    this.disposeMemberCard?.();this.disposeMemberCard=undefined;
     await this.discardPendingInputAttachments();
     this.clearEditorSelectionHighlight();
     // Submenus live on document.body, so they outlive contentEl unless removed here.
@@ -608,6 +619,7 @@ export class WeSightChatView extends ItemView {
   }
 
   private render(): void {
+    this.disposeMemberCard?.();this.disposeMemberCard=undefined;
     this.hideConfigSubmenu();
     this.hideModelSubmenu();
     const root = this.contentEl;
@@ -679,6 +691,13 @@ export class WeSightChatView extends ItemView {
 
     const messagesWrapper = root.createDiv({ cls: 'wesight-messages-wrapper' });
     this.messagesEl = messagesWrapper.createDiv({ cls: 'wesight-chat-log' });
+
+    if(this.agentId==='claude'&&this.deps.getSettings().configSources.claude==='wesightManaged'){
+      this.disposeMemberCard=renderMemberAiCard(root,{service:this.deps.memberAi,installer:this.deps.claudeInstaller,auth:this.deps.auth,
+        getSettings:()=>this.deps.getSettings(),selectedModel:()=>this.conversation?.managedModel||this.deps.getSettings().memberAiModel,
+        selectModel:async id=>{if(this.running)return;this.ensureConversation();if(this.conversation)this.conversation.managedModel=id;await this.persistConversation();this.render();this.renderMessages();},
+        switchCustom:()=>this.selectConfigSource('claude','providerProfile')});
+    }
 
     const composer = root.createDiv({ cls: 'wesight-input-container' });
     const inputWrapper = composer.createDiv({ cls: 'wesight-input-wrapper' });
@@ -1088,6 +1107,8 @@ export class WeSightChatView extends ItemView {
 
     submenu.createDiv({ cls: 'wesight-model-group', text: '配置来源' });
 
+    if(agentId==='claude')this.renderConfigSourceOption(submenu,{agentId,source:'wesightManaged',currentSource,icon:'sparkles',label:'默认配置（推荐）'});
+
     this.renderConfigSourceOption(submenu, {
       agentId,
       source: 'localCli',
@@ -1100,7 +1121,7 @@ export class WeSightChatView extends ItemView {
       source: 'providerProfile',
       currentSource,
       icon: 'sparkles',
-      label: 'WeSight 配置',
+      label: '自定义配置',
       disabled: agentId === 'codex',
     });
 
@@ -1175,6 +1196,7 @@ export class WeSightChatView extends ItemView {
 
   private getCurrentModelLabel(agentId: AgentId, source: RuntimeConfigSource): string {
     const settings = this.deps.getSettings();
+    if(source==='wesightManaged')return this.deps.memberAi.status.models.find(m=>m.id===(this.conversation?.managedModel||settings.memberAiModel||this.deps.memberAi.status.defaultModel))?.name||'WeSight 会员模型';
     if (agentId === 'codex' && source === 'providerProfile') return '不可用';
     if (source === 'localCli') {
       if (agentId === 'claude') {
@@ -1418,6 +1440,8 @@ export class WeSightChatView extends ItemView {
   }
 
   private async selectConfigSource(agentId: AgentId, source: RuntimeConfigSource): Promise<void> {
+    if (this.running || this.preparingMessage) return;
+    if(source==='wesightManaged'&&agentId!=='claude')return;
     if (agentId === 'codex' && source === 'providerProfile') return;
     const settings = this.deps.getSettings();
     settings.configSources[agentId] = source;
@@ -1442,7 +1466,7 @@ export class WeSightChatView extends ItemView {
       configuredPaths: settings.configuredPaths,
       configSources: settings.configSources,
     }).resolve(agentId);
-    if (!status.found) {
+    if (!status.found && source !== 'wesightManaged') {
       this.openRuntimeSetup();
     }
   }
@@ -1575,6 +1599,15 @@ export class WeSightChatView extends ItemView {
     settings: WeSightObsidianSettings,
     isLocal: boolean,
   ): void {
+    if(settings.configSources.claude==='wesightManaged'){
+      dropdown.createDiv({cls:'wesight-model-group',text:'WeSight 会员模型'});
+      for(const model of this.deps.memberAi.status.models){
+        const option=dropdown.createDiv({cls:'wesight-model-option',text:model.name});
+        option.onclick=async()=>{if(this.running)return;this.ensureConversation();if(this.conversation)this.conversation.managedModel=model.id;await this.persistConversation();this.render();this.renderMessages();};
+      }
+      if(!this.deps.memberAi.status.models.length)dropdown.createDiv({cls:'wesight-model-option disabled',text:'登录并刷新会员模型状态'});
+      return;
+    }
     if (isLocal) {
       dropdown.createDiv({ cls: 'wesight-model-group', text: '本机配置' });
       const detected = getClaudeDetectedLocalModel();
@@ -1586,7 +1619,8 @@ export class WeSightChatView extends ItemView {
       return;
     }
 
-    const profiles = this.deps.providerStore.list('claude');
+    const profiles = this.deps.providerStore.list('claude')
+      .sort((a, b) => Number(isTokenDanceProfile(b)) - Number(isTokenDanceProfile(a)));
     dropdown.createDiv({ cls: 'wesight-model-group', text: '供应商' });
     if (profiles.length === 0) {
       const empty = dropdown.createDiv({ cls: 'wesight-model-option disabled' });
@@ -2067,7 +2101,16 @@ export class WeSightChatView extends ItemView {
     empty.createDiv({ cls: 'wesight-welcome-greeting', text: this.conversationMode === 'knowledge' ? '向你的知识库提问' : 'How can I help?' });
   }
 
+  private preparingMessage = false;
+
   private async sendMessage(): Promise<void> {
+    if (this.preparingMessage || this.running) return;
+    this.preparingMessage = true;
+    try { await this.sendPreparedMessage(); }
+    finally { this.preparingMessage = false; }
+  }
+
+  private async sendPreparedMessage(): Promise<void> {
     if (this.running) return;
     this.cancelledByUser = false;
     const rawPrompt = this.inputEl.value.trim();
@@ -2102,6 +2145,12 @@ export class WeSightChatView extends ItemView {
     }
     const settings = this.deps.getSettings();
     const knowledgeMode = this.conversationMode === 'knowledge';
+    if(this.agentId==='claude'&&settings.configSources.claude==='wesightManaged'){
+      const found=new RuntimeDiscovery({configuredPaths:settings.configuredPaths}).resolve('claude').found;
+      if(!found){new Notice('请先在使用准备卡片中一键安装 Claude Code。');return;}
+      try {conversation.managedModel=await this.deps.memberAi.requireReady(conversation.managedModel||settings.memberAiModel);}
+      catch(error){new Notice(error instanceof Error?error.message:'会员模型暂不可用');return;}
+    }
     if (knowledgeMode && this.agentId !== 'claude' && this.agentId !== 'codex') {
       new Notice('知识大脑首版仅支持 Claude Code 与 Codex。');
       return;
@@ -2312,9 +2361,12 @@ export class WeSightChatView extends ItemView {
           question: rawPrompt,
           agentId: this.agentId,
           sessionId: conversation.modeSessionIds?.knowledge?.[this.agentId],
+          managedModel: settings.configSources[this.agentId] === 'wesightManaged' ? conversation.managedModel : undefined,
         }, onKnowledgeEvent);
       } else {
-        const modelOverride = this.agentId === 'claude' && settings.configSources.claude === 'localCli'
+        const modelOverride = this.agentId === 'claude' && settings.configSources.claude === 'wesightManaged'
+          ? conversation.managedModel
+          : this.agentId === 'claude' && settings.configSources.claude === 'localCli'
           ? ''
           : settings.localModelByAgent[this.agentId];
         await this.deps.runtimeManager.runTurn({
@@ -2462,6 +2514,7 @@ export class WeSightChatView extends ItemView {
 
   private getModelSelectorLabel(): string {
     const settings = this.deps.getSettings();
+    if(settings.configSources[this.agentId]==='wesightManaged')return this.conversation?.managedModel||settings.memberAiModel||this.deps.memberAi.status.defaultModel||'默认配置（推荐）';
     if (settings.configSources[this.agentId] === 'localCli') {
       if (this.agentId === 'claude') {
         const detected = getClaudeDetectedLocalModel();
@@ -3010,7 +3063,7 @@ function mergeAttachments(attachments: FileAttachment[]): FileAttachment[] {
 }
 
 function configSourceLabel(source: RuntimeConfigSource): string {
-  return source === 'providerProfile' ? 'WeSight 配置' : '本机配置';
+  return source==='wesightManaged'?'默认配置（推荐）':source === 'providerProfile' ? '自定义配置' : '本地配置';
 }
 
 

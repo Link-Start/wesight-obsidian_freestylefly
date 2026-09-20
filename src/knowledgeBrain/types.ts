@@ -90,6 +90,7 @@ export interface SaveAnswerInput {
 }
 
 export interface KnowledgeQueryInput {
+  managedModel?: string;
   conversationId: string;
   question: string;
   agentId: KnowledgeBrainAgentId;
