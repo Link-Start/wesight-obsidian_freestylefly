@@ -503,7 +503,7 @@ export class MultiPublishPanel {
       const result = this.options.bridge.createTask(this.snapshot, Array.from(this.selected), forcePair);
       this.task = result.task;
       window.open(result.handoffUrl, '_blank', 'noopener,noreferrer');
-      new Notice('已交给浏览器扩展准备多平台草稿。');
+      new Notice('已打开浏览器交接页，扩展正在准备多平台草稿。');
     } catch (error) {
       this.error = error instanceof Error ? error.message : '多平台任务启动失败';
     } finally {

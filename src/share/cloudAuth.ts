@@ -68,6 +68,16 @@ export class CloudAuthService {
     window.open(url.toString(), '_blank', 'noopener,noreferrer');
   }
 
+  getUsageUrl(): string {
+    return 'https://pay.wesight.ai/usage';
+  }
+
+  openUsage(): void {
+    const url = new URL(this.getUsageUrl());
+    url.searchParams.set('source', 'obsidian');
+    window.open(url.toString(), '_blank', 'noopener,noreferrer');
+  }
+
   getAdminUrl(): string {
     return 'https://pay.wesight.ai/admin';
   }

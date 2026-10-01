@@ -37,6 +37,7 @@ import { isTokenDanceProfile } from '../tokendance/service';
 import type { MemberAiService } from '../memberAi/service';
 import type { ClaudeInstaller } from '../memberAi/installer';
 import { renderMemberAiCard } from './memberAiCard';
+import { addMemberAiUsageMenuItem } from './memberAiUsageMenuItem';
 import { getClaudeDetectedLocalModel, listLocalModels } from '../runtime/localModels';
 import type { UpdateService, UpdateState } from '../update/updateService';
 import { RuntimeSetupModal } from './runtimeSetupModal';
@@ -129,6 +130,7 @@ export class WeSightChatView extends ItemView {
   private updateUnsubscribe: (() => void) | null = null;
   private knowledgeAccessUnsubscribe: (() => void) | null = null;
   private codexStatusUnsubscribe: (() => void) | null = null;
+  private memberAiUnsubscribe: (() => void) | null = null;
   private accountMenu: Menu | null = null;
 
   constructor(leaf: WorkspaceLeaf, private readonly deps: ChatViewDeps) {
@@ -210,6 +212,19 @@ export class WeSightChatView extends ItemView {
         this.refreshStatus();
       });
     }
+    if (!this.memberAiUnsubscribe) {
+      this.memberAiUnsubscribe = this.deps.memberAi.onChange(() => {
+        if (this.agentId !== 'claude' || this.deps.getSettings().configSources.claude !== 'wesightManaged') return;
+        const selector = this.contentEl.querySelector('.wesight-profile-selector');
+        const label = selector?.querySelector('.wesight-model-label');
+        const dropdown = selector?.querySelector<HTMLElement>('.wesight-model-dropdown');
+        if (label) label.textContent = this.getModelSelectorLabel();
+        if (dropdown) {
+          dropdown.empty();
+          this.renderClaudeModelDropdown(dropdown, this.deps.getSettings(), false);
+        }
+      });
+    }
     this.updateEditorContextFromWorkspace();
     this.render();
     this.ensureConversation();
@@ -236,6 +251,8 @@ export class WeSightChatView extends ItemView {
     this.knowledgeAccessUnsubscribe = null;
     this.codexStatusUnsubscribe?.();
     this.codexStatusUnsubscribe = null;
+    this.memberAiUnsubscribe?.();
+    this.memberAiUnsubscribe = null;
   }
 
   private closeAllDropdowns(): void {
@@ -694,8 +711,7 @@ export class WeSightChatView extends ItemView {
 
     if(this.agentId==='claude'&&this.deps.getSettings().configSources.claude==='wesightManaged'){
       this.disposeMemberCard=renderMemberAiCard(root,{service:this.deps.memberAi,installer:this.deps.claudeInstaller,auth:this.deps.auth,
-        getSettings:()=>this.deps.getSettings(),selectedModel:()=>this.conversation?.managedModel||this.deps.getSettings().memberAiModel,
-        selectModel:async id=>{if(this.running)return;this.ensureConversation();if(this.conversation)this.conversation.managedModel=id;await this.persistConversation();this.render();this.renderMessages();},
+        getSettings:()=>this.deps.getSettings(),presentation:'setup',
         switchCustom:()=>this.selectConfigSource('claude','providerProfile')});
     }
 
@@ -883,7 +899,7 @@ export class WeSightChatView extends ItemView {
 
   private openAccountMenu(anchor: HTMLElement, user: CloudUser): void {
     this.accountMenu?.hide();
-    const menu = new Menu();
+    const menu = new Menu().setUseNativeMenu(false);
     const profile = createFragment();
     const profileRow = createDiv();
     profileRow.className = 'wesight-account-menu-profile';
@@ -907,6 +923,7 @@ export class WeSightChatView extends ItemView {
       .setIsLabel(true));
     menu.addSeparator();
     this.addUpdateMenuItem(menu);
+    const disposeUsage = addMemberAiUsageMenuItem(menu, this.deps.memberAi, this.deps.auth);
     menu.addSeparator();
     menu.addItem(item => item
       .setTitle('账户详情')
@@ -935,14 +952,14 @@ export class WeSightChatView extends ItemView {
         new Notice('已退出 WeSight。');
       }));
     menu.onHide(() => {
+      disposeUsage();
       if (this.accountMenu === menu) this.accountMenu = null;
     });
     const bounds = anchor.getBoundingClientRect();
-    const accountMenuWidth = 190;
     menu.showAtPosition({
-      x: Math.max(8, bounds.right - accountMenuWidth),
+      x: bounds.right,
       y: bounds.bottom + 4,
-      width: accountMenuWidth,
+      left: true,
     });
     this.accountMenu = menu;
   }
@@ -1603,6 +1620,7 @@ export class WeSightChatView extends ItemView {
       dropdown.createDiv({cls:'wesight-model-group',text:'WeSight 会员模型'});
       for(const model of this.deps.memberAi.status.models){
         const option=dropdown.createDiv({cls:'wesight-model-option',text:model.name});
+        option.toggleClass('selected', model.id === (this.conversation?.managedModel || settings.memberAiModel || this.deps.memberAi.status.defaultModel));
         option.onclick=async()=>{if(this.running)return;this.ensureConversation();if(this.conversation)this.conversation.managedModel=model.id;await this.persistConversation();this.render();this.renderMessages();};
       }
       if(!this.deps.memberAi.status.models.length)dropdown.createDiv({cls:'wesight-model-option disabled',text:'登录并刷新会员模型状态'});
@@ -2514,7 +2532,10 @@ export class WeSightChatView extends ItemView {
 
   private getModelSelectorLabel(): string {
     const settings = this.deps.getSettings();
-    if(settings.configSources[this.agentId]==='wesightManaged')return this.conversation?.managedModel||settings.memberAiModel||this.deps.memberAi.status.defaultModel||'默认配置（推荐）';
+    if (settings.configSources[this.agentId] === 'wesightManaged') {
+      const modelId = this.conversation?.managedModel || settings.memberAiModel || this.deps.memberAi.status.defaultModel;
+      return this.deps.memberAi.status.models.find(model => model.id === modelId)?.name || modelId || 'WeSight 会员模型';
+    }
     if (settings.configSources[this.agentId] === 'localCli') {
       if (this.agentId === 'claude') {
         const detected = getClaudeDetectedLocalModel();

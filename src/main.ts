@@ -219,6 +219,7 @@ export default class WeSightPlugin extends Plugin {
       WESIGHT_WECHAT_PREVIEW_VIEW_TYPE,
       (leaf: WorkspaceLeaf) => new WeChatPreviewView(leaf, {
         auth: this.cloudAuth,
+        memberAi: this.memberAi,
         api: this.wechatCloudApi,
         themeService: this.wechatThemeService,
         templateThemeService: this.wechatTemplateThemeService,

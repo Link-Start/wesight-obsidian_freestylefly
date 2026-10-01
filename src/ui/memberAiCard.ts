@@ -16,6 +16,7 @@ export function renderMemberAiCard(
     switchCustom: () => Promise<void>;
     selectedModel?: () => string;
     selectModel?: (id: string) => Promise<void>;
+    presentation?: 'setup' | 'full';
   },
 ): () => void {
   const card = parent.createDiv({ cls: 'wesight-member-ai-card' });
@@ -29,8 +30,11 @@ export function renderMemberAiCard(
   const render = (): void => {
     card.empty();
     const status = deps.service.status;
-    card.createEl('h4', { text: '使用准备' });
     const found = new RuntimeDiscovery({ configuredPaths: deps.getSettings().configuredPaths }).resolve('claude').found;
+    const setupOnly = deps.presentation === 'setup';
+    card.hidden = setupOnly && found && status.state === 'ready';
+    if (card.hidden) return;
+    card.createEl('h4', { text: '使用准备' });
     if (!found) {
       card.createEl('p', {
         text: deps.installer.message || '首次使用需要安装 Claude Code。点击后从官方下载安装，无需配置 API Key。',
@@ -52,7 +56,7 @@ export function renderMemberAiCard(
     if (status.state === 'membership-required' || status.state === 'expired')
       action(status.state === 'expired' ? '续费会员' : '开通会员', () => deps.auth.openBilling());
     // Quota is only meaningful once the service is open; 'unavailable' reports 0% with no budget.
-    if (status.membership.active && (status.state === 'ready' || status.state === 'quota-exhausted')) {
+    if (!setupOnly && status.membership.active && (status.state === 'ready' || status.state === 'quota-exhausted')) {
       const percent = Math.max(0, Math.min(100, status.quota.remainingPercent));
       card.createEl('p', { text: `本周剩余 ${percent}% · 会员有效` });
       card.createEl('progress', { attr: { max: '100', value: String(percent), 'aria-label': '会员 AI 本周剩余额度' } });
@@ -62,7 +66,7 @@ export function renderMemberAiCard(
           : '首次调用后开启 7 天额度周期。',
       });
     }
-    if (status.models.length && deps.selectModel) {
+    if (!setupOnly && status.models.length && deps.selectModel) {
       const label = card.createEl('label', { text: '会员模型 ' });
       const select = label.createEl('select', { cls: 'dropdown', attr: { 'aria-label': 'WeSight 会员模型' } });
       for (const model of status.models) select.createEl('option', { value: model.id, text: model.name });
@@ -76,6 +80,7 @@ export function renderMemberAiCard(
     }
     const refresh = action('刷新状态', () => deps.service.refresh().then(() => {}));
     refresh.disabled = status.state === 'checking';
+    if (setupOnly && status.state === 'quota-exhausted') action('查看使用情况', () => deps.auth.openUsage());
     action('切换自定义配置', deps.switchCustom);
   };
   const unsub = deps.service.onChange(render);

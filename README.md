@@ -25,11 +25,15 @@ Signed-in free users can convert and prepare one platform at a time. Active memb
 
 **分享 → 多平台** supports Zhihu, CSDN, Juejin, Bilibili articles, Toutiao, and Weibo articles. The social workbench additionally prepares Xiaohongshu image posts, Weibo image posts, and Jike posts.
 
-Install [WeSight Publish Assistant 1.0.0 or later](https://github.com/freestylefly/wesight-chrome/releases) in Chrome or Edge and follow the one-time local pairing flow. The plugin starts a temporary HTTP service bound only to `127.0.0.1`; task access expires after ten minutes. Article and image transfer to the extension does not use WeSight Cloud. The extension then uploads to the platforms you chose using the browser's existing signed-in session. Keep Obsidian open until preparation completes.
+Install [WeSight Publish Assistant 1.0.0 or later](https://github.com/freestylefly/wesight-chrome/releases) in Chrome, Edge, or Arc and follow the one-time local pairing flow. The plugin starts a temporary HTTP service bound only to `127.0.0.1`; task access expires after ten minutes. Article and image transfer to the extension does not use WeSight Cloud. The extension then uploads to the platforms you chose using the browser's existing signed-in session. Keep Obsidian open until preparation completes.
 
 The task panel supports status, editor links, login recovery, and retries. All workflows stop at an editable draft: **you perform the final Publish action**. The existing WeChat draft service continues separately.
 
-See the [1.0.0 release notes](docs/releases/1.0.0.md) for the complete Chinese update summary and upgrade instructions.
+### Member models and usage (1.1.0)
+
+Claude Code supports WeSight member models through the recommended configuration, or a personal TokenDance connection. The account menu shows the remaining weekly allowance next to **使用情况** and opens the web dashboard with model usage and reset times. Existing installations retain their selected configuration; model availability follows the account's current entitlement.
+
+See the [1.1.0 release notes](docs/releases/1.1.0.md) for the complete Chinese update summary and upgrade instructions.
 
 ### Local agent chat
 

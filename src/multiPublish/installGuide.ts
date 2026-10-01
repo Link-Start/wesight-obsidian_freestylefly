@@ -13,7 +13,7 @@ export const CHROME_INSTALL_STEPS = [
   },
   {
     title: '打开扩展管理页',
-    description: '进入 Chrome 的扩展程序管理页面。',
+    description: '进入 Chrome、Edge 或 Arc 的扩展程序管理页面。',
   },
   {
     title: '加载插件文件夹',

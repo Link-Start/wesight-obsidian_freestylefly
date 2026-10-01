@@ -17,6 +17,8 @@ import { CloudApiError } from '../share/cloudApi';
 import type { CloudUser } from '../share/types';
 import { WeChatCloudApi } from '../wechat/cloudApi';
 import { openBillingModal } from './billingModal';
+import type { MemberAiService } from '../memberAi/service';
+import { addMemberAiUsageMenuItem } from './memberAiUsageMenuItem';
 import path from 'path';
 import type { RuntimeManager } from '../runtime/runtimeManager';
 import {
@@ -95,6 +97,7 @@ type WeChatPreviewTab = 'preview' | 'settings' | 'monitoring';
 
 interface WeChatPreviewViewOptions {
   auth: CloudAuthService;
+  memberAi: MemberAiService;
   api: WeChatCloudApi;
   themeService: WeChatThemeService;
   templateThemeService: TemplateThemeService;
@@ -223,6 +226,7 @@ export class WeChatPreviewView extends ItemView {
   }
 
   override async onClose(): Promise<void> {
+    this.accountMenu?.hide();
     this.articleStatsRequestId += 1;
     this.fileSwitchRequests.invalidate();
     this.previewLoadRequests.invalidate();
@@ -721,7 +725,7 @@ export class WeChatPreviewView extends ItemView {
 
   private openAccountMenu(anchor: HTMLElement, user: CloudUser): void {
     this.accountMenu?.hide();
-    const menu = new Menu();
+    const menu = new Menu().setUseNativeMenu(false);
     const profile = createFragment();
     const profileRow = createDiv();
     profileRow.className = 'wesight-account-menu-profile';
@@ -745,6 +749,7 @@ export class WeChatPreviewView extends ItemView {
       .setIsLabel(true));
     menu.addSeparator();
     this.addUpdateMenuItem(menu);
+    const disposeUsage = addMemberAiUsageMenuItem(menu, this.options.memberAi, this.options.auth);
     menu.addSeparator();
     menu.addItem(item => item
       .setTitle('账户详情')
@@ -773,14 +778,14 @@ export class WeChatPreviewView extends ItemView {
         new Notice('已退出 WeSight。');
       }));
     menu.onHide(() => {
+      disposeUsage();
       if (this.accountMenu === menu) this.accountMenu = null;
     });
     const bounds = anchor.getBoundingClientRect();
-    const accountMenuWidth = 190;
     menu.showAtPosition({
-      x: Math.max(8, bounds.right - accountMenuWidth),
+      x: bounds.right,
       y: bounds.bottom + 4,
-      width: accountMenuWidth,
+      left: true,
     });
     this.accountMenu = menu;
   }

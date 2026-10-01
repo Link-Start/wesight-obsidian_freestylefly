@@ -407,6 +407,22 @@ button.wesight-account-button:hover {
   white-space: nowrap;
 }
 
+.wesight-account-menu-usage {
+  display: flex;
+  width: 100%;
+  min-width: 148px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  white-space: nowrap;
+}
+
+.wesight-account-menu-quota {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  font-variant-numeric: tabular-nums;
+}
+
 .wesight-messages-wrapper {
   position: relative;
   flex: 1;
