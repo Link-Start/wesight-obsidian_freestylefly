@@ -27,6 +27,32 @@ describe('ProviderStore', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
+  test('preserves catalog metadata through disk, model switches, partial saves and redacted round trips', () => {
+    const secrets = createSecretStorage();
+    const store = new ProviderStore(secrets, env);
+    const modelCatalog = [
+      { id: 'google/gemini-2.5-pro', name: 'My Gemini', modelVendor: 'google', supportsImage: true },
+      { id: 'gpt-4o', name: 'My GPT', modelVendor: 'openai' },
+    ];
+    const saved = store.save({ agentId: 'claude', name: 'OpenLux', providerKey: 'openlux', apiKey: 'private-key',
+      baseUrl: 'https://api.openlux.ai/v1', models: modelCatalog.map(model => model.id), modelCatalog,
+      defaultModel: modelCatalog[0].id });
+    const disk = fs.readFileSync(store.path, 'utf8');
+    expect(disk).not.toContain('private-key');
+    expect(disk).toContain('My Gemini');
+    const restored = new ProviderStore(secrets, env);
+    expect(restored.find('claude')?.modelCatalog).toEqual(modelCatalog);
+    const external = restored.list()[0];
+    external.modelCatalog![0].name = 'Changed clone';
+    expect(restored.list()[0].modelCatalog![0].name).toBe('My Gemini');
+    expect(restored.setActiveModel(saved.id, 'gpt-4o').modelCatalog).toEqual(modelCatalog);
+    expect(restored.save({ id: saved.id, agentId: 'claude', name: 'OpenLux', models: saved.models, defaultModel: 'gpt-4o' }))
+      .toMatchObject({ providerKey: 'openlux', modelCatalog });
+    const exported = restored.exportProfiles();
+    expect(JSON.stringify(exported)).not.toContain('private-key');
+    expect(restored.importProfiles(exported)[0]).toMatchObject({ providerKey: 'openlux', modelCatalog, defaultModel: 'gpt-4o', apiKey: '' });
+  });
+
   test('makes the first profile default for an agent', () => {
     const store = new ProviderStore(createSecretStorage(), env);
     const profile = store.save({

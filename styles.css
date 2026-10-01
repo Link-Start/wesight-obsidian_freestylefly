@@ -9760,3 +9760,58 @@ body.theme-dark .wesight-wechat-publish-button {
 .wesight-member-ai-card progress::-webkit-progress-bar { background: var(--background-modifier-border); }
 .wesight-member-ai-card progress::-webkit-progress-value { background: var(--interactive-accent); border-radius: 3px; }
 .wesight-member-ai-card select { max-width: 100%; }
+
+/* OpenLux catalog and the Claude provider picker share the desktop grouping layout. */
+.wesight-vendor-icon { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; flex: 0 0 20px; }
+.wesight-vendor-icon svg { width: 20px; height: 20px; }
+.wesight-openlux-settings .wesight-provider-help a { margin-right: 16px; }
+.wesight-openlux-settings .wesight-provider-title-wrap > .wesight-vendor-icon { color: #ea7900; }
+.wesight-openlux-settings input { width: 100%; }
+.wesight-openlux-settings [hidden] { display: none; }
+.wesight-model-catalog { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; }
+.wesight-catalog-search { display: flex; align-items: center; gap: 8px; border: 1px solid var(--background-modifier-border); border-radius: 8px; padding: 0 10px; flex-shrink: 0; }
+.wesight-catalog-search > span { display: flex; color: var(--text-muted); }
+.wesight-catalog-search svg { width: 15px; height: 15px; }
+.wesight-catalog-search input[type=search] { width: 100%; min-width: 0; height: 34px; padding: 4px 0; border: 0; background: transparent; box-shadow: none; }
+.wesight-catalog-search:focus-within { border-color: var(--interactive-accent); box-shadow: 0 0 0 1px var(--interactive-accent); }
+.wesight-catalog-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; overscroll-behavior: contain; min-height: 0; max-height: 340px; }
+.wesight-catalog-group { flex-shrink: 0; border: 1px solid var(--background-modifier-border); border-radius: 9px; overflow: hidden; }
+button.wesight-catalog-group-head { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px; height: auto; text-align: left; background: var(--background-secondary); border: 0; border-radius: 0; box-shadow: none; color: var(--text-normal); font-size: 12px; }
+.wesight-catalog-vendor { flex: 1; min-width: 0; }
+.wesight-catalog-count { flex-shrink: 0; font-size: 11px; color: var(--text-muted); background: var(--background-primary); border-radius: 5px; padding: 1px 5px; }
+.wesight-catalog-chevron { display: flex; }
+.wesight-catalog-chevron svg, .wesight-catalog-check svg { width: 14px; height: 14px; }
+.wesight-catalog-row { display: flex; align-items: center; min-width: 0; border-top: 1px solid var(--background-modifier-border); }
+.wesight-catalog-row.is-selected { background: var(--background-modifier-hover); }
+button.wesight-catalog-select { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; height: auto; min-height: 50px; padding: 8px 10px; color: var(--text-normal); background: transparent; box-shadow: none; border: 0; border-radius: 0; text-align: left; }
+button.wesight-catalog-select:hover, button.wesight-picker-supplier:hover { background: var(--background-modifier-hover); }
+.wesight-catalog-copy { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 3px; }
+.wesight-catalog-name, .wesight-catalog-id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wesight-catalog-name { font-size: 12px; font-weight: 500; }
+.wesight-catalog-id { color: var(--text-muted); font-size: 10px; }
+.wesight-catalog-badge { font-size: 10px; flex-shrink: 0; border: 1px solid var(--background-modifier-border); color: var(--text-muted); border-radius: 6px; padding: 1px 4px; }
+.wesight-catalog-check { display: flex; flex-shrink: 0; color: var(--interactive-accent); }
+.wesight-catalog-actions { display: flex; gap: 2px; flex-shrink: 0; padding-right: 5px; }
+.wesight-catalog-default { position: relative; }
+button.wesight-catalog-default-button { display: flex; border: 1px solid var(--background-modifier-border); background: var(--background-primary); width: 100%; justify-content: space-between; text-align: left; padding: 8px 12px; height: auto; }
+.wesight-catalog-default-menu { position: absolute; top: calc(100% + 5px); left: 0; right: 0; padding: 10px; z-index: var(--layer-popover); background: var(--background-primary); border: 1px solid var(--background-modifier-border); border-radius: 10px; box-shadow: var(--shadow-s); }
+.wesight-provider-picker { position: fixed; box-sizing: border-box; z-index: var(--layer-modal, 10001); display: grid; grid-template-columns: minmax(120px, 165px) minmax(0, 1fr); height: 420px; overflow: hidden; border: 1px solid var(--background-modifier-border); border-radius: 12px; background: var(--background-primary); color: var(--text-normal); box-shadow: var(--shadow-l); }
+.wesight-picker-sidebar { display: flex; flex-direction: column; min-height: 0; padding: 10px 6px; border-right: 1px solid var(--background-modifier-border); background: var(--background-secondary); }
+.wesight-picker-suppliers { min-height: 0; flex: 1; overflow-y: auto; }
+button.wesight-picker-supplier { display: flex; align-items: center; gap: 7px; width: 100%; height: auto; min-height: 38px; padding: 7px; border: 0; box-shadow: none; text-align: left; background: transparent; color: var(--text-normal); }
+button.wesight-picker-supplier.is-selected { background: var(--background-modifier-hover); color: var(--interactive-accent); }
+.wesight-picker-supplier-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+button.wesight-picker-manage { flex-shrink: 0; margin-top: 8px; padding: 8px 4px; font-size: 11px; height: auto; border: 0; box-shadow: none; background: transparent; color: var(--text-muted); }
+.wesight-picker-detail { display: flex; flex-direction: column; min-height: 0; min-width: 0; padding: 12px; gap: 10px; }
+.wesight-picker-title { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+.wesight-picker-detail > .wesight-model-catalog { flex: 1; }
+.wesight-picker-detail .wesight-catalog-list { max-height: none; }
+.wesight-selected-model-source { display: block; grid-column: 1 / -1; color: var(--text-muted); font-size: 10px; white-space: nowrap; }
+.wesight-model-btn:has(.wesight-selected-model-source) { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; }
+.wesight-provider-picker button:focus-visible, .wesight-model-catalog button:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: -2px; }
+@media (max-width: 430px) {
+  .wesight-provider-picker { grid-template-columns: 128px minmax(0, 1fr); }
+  .wesight-picker-detail { padding: 8px; }
+  .wesight-catalog-select { flex-wrap: wrap; }
+  .wesight-catalog-badge { font-size: 9px; }
+}

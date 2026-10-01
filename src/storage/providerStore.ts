@@ -1,3 +1,4 @@
+import type { CatalogModel } from '../openlux/catalog';
 import fs from 'fs';
 import type { SecretStorage } from 'obsidian';
 
@@ -25,6 +26,8 @@ const EMPTY_STORE: ProviderStoreFile = {
 };
 
 export interface ProviderProfileInput {
+  providerKey?: string;
+  modelCatalog?: CatalogModel[];
   agentId: AgentId;
   id?: string;
   name: string;
@@ -48,6 +51,22 @@ function normalizeModels(models: unknown, activeModel: string): string[] {
   return [...new Set(list)];
 }
 
+function normalizeCatalog(value: unknown): CatalogModel[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const models = new Map<string, CatalogModel>();
+  for (const entry of value) {
+    const row = recordFromUnknown(entry);
+    if (!row || typeof row.id !== 'string' || !row.id.trim()) continue;
+    const id = row.id.trim();
+    models.set(id, {
+      id, name: typeof row.name === 'string' && row.name.trim() ? row.name.trim() : id,
+      ...(typeof row.modelVendor === 'string' ? { modelVendor: row.modelVendor } : {}),
+      ...(typeof row.supportsImage === 'boolean' ? { supportsImage: row.supportsImage } : {}),
+    });
+  }
+  return [...models.values()];
+}
+
 function inferWireApi(baseUrl: string, explicit?: unknown): ProviderWireApi {
   if (explicit === 'responses' || explicit === 'chat') {
     return explicit;
@@ -63,6 +82,8 @@ function inferWireApi(baseUrl: string, explicit?: unknown): ProviderWireApi {
 function normalizeProfile(profile: ProviderProfile): ProviderProfile {
   const defaultModel = (profile.defaultModel ?? profile.model ?? '').trim();
   return {
+    providerKey: typeof profile.providerKey === 'string' ? profile.providerKey : undefined,
+    modelCatalog: normalizeCatalog(profile.modelCatalog),
     id: profile.id,
     agentId: profile.agentId,
     name: profile.name,
@@ -85,7 +106,7 @@ function normalizeProfile(profile: ProviderProfile): ProviderProfile {
 }
 
 function cloneProfile(profile: ProviderProfile): ProviderProfile {
-  return { ...profile, models: [...profile.models] };
+  return { ...profile, models: [...profile.models], modelCatalog: profile.modelCatalog?.map(model => ({ ...model })) };
 }
 
 interface ProviderReadCache {
@@ -124,9 +145,12 @@ export class ProviderStore {
 
   save(input: ProviderProfileInput): ProviderProfile {
     const store = this.read();
+    const previous = store.profiles.find(profile => profile.id === input.id);
     const now = Date.now();
     const defaultModel = (input.defaultModel ?? input.model ?? '').trim();
     const profile: ProviderProfile = {
+      providerKey: input.providerKey ?? previous?.providerKey,
+      modelCatalog: normalizeCatalog(input.modelCatalog ?? previous?.modelCatalog),
       id: input.id?.trim() || createId('profile'),
       agentId: input.agentId,
       name: input.name.trim(),
@@ -226,6 +250,8 @@ export class ProviderStore {
         return { ...profile };
       }
       return {
+        providerKey: profile.providerKey,
+        modelCatalog: profile.modelCatalog,
         id: profile.id,
         agentId: profile.agentId,
         name: profile.name,
@@ -271,6 +297,8 @@ export class ProviderStore {
         ? profile.models.filter((model): model is string => typeof model === 'string')
         : undefined;
       imported.push(this.save({
+        providerKey: typeof profile.providerKey === 'string' ? profile.providerKey : undefined,
+        modelCatalog: normalizeCatalog(profile.modelCatalog),
         agentId,
         id: typeof profile.id === 'string' ? profile.id : undefined,
         name: profile.name,

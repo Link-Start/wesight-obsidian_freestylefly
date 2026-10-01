@@ -1,3 +1,7 @@
+import { isOpenLuxProfile } from '../openlux/service';
+import { getModelVendor, profileCatalog } from '../openlux/catalog';
+import { MODEL_VENDOR_LABELS } from '../providers/modelVendors';
+import { showProviderModelPicker } from './providerModelPicker';
 import { Editor, ItemView, MarkdownRenderer, MarkdownView, Menu, Notice, setIcon, TFile, WorkspaceLeaf } from 'obsidian';
 
 import { AGENT_IDS, getAgentDescriptor } from '../agents';
@@ -123,6 +127,7 @@ export class WeSightChatView extends ItemView {
   private highlightedMarkdownView: MarkdownView | null = null;
   private dismissedContextSignature: string | null = null;
   private configSubmenuEl: HTMLElement | null = null;
+  private disposeProviderPicker?: () => void;
   private modelSubmenuEl: HTMLElement | null = null;
   private submenuHideTimeout: number | null = null;
   private scrollScheduled = false;
@@ -1445,6 +1450,8 @@ export class WeSightChatView extends ItemView {
   }
 
   private hideConfigSubmenu(): void {
+    this.disposeProviderPicker?.();
+    this.disposeProviderPicker = undefined;
     if (this.submenuHideTimeout) {
       window.clearTimeout(this.submenuHideTimeout);
       this.submenuHideTimeout = null;
@@ -1494,6 +1501,40 @@ export class WeSightChatView extends ItemView {
     button.createSpan({ cls: 'wesight-model-label', text: this.getModelSelectorLabel() });
     const chevron = button.createSpan({ cls: 'wesight-model-chevron' });
     setIcon(chevron, 'chevron-up');
+    const currentSettings = this.deps.getSettings();
+    if (this.agentId === 'claude' && currentSettings.configSources.claude === 'providerProfile') {
+      const profiles = this.deps.providerStore.list('claude');
+      const selectedProfile = profiles.find(profile => profile.id === currentSettings.providerProfileByAgent.claude);
+      if (selectedProfile && isOpenLuxProfile(selectedProfile)) {
+        const model = profileCatalog(selectedProfile).find(model => model.id === (selectedProfile.defaultModel || selectedProfile.model));
+        button.createSpan({ cls: 'wesight-selected-model-source', text: `OpenLux · ${MODEL_VENDOR_LABELS[getModelVendor(model ?? { id: selectedProfile.defaultModel })]}` });
+      }
+      button.tabIndex = 0;
+      button.setAttr('role', 'button');
+      button.setAttr('aria-haspopup', 'dialog');
+      button.setAttr('aria-expanded', 'false');
+      button.onclick = event => {
+        event.stopPropagation();
+        const wasOpen = Boolean(this.disposeProviderPicker);
+        this.closeAllDropdowns();
+        if (wasOpen || this.running || this.preparingMessage) return;
+        this.disposeProviderPicker = showProviderModelPicker(button, {
+          profiles: this.deps.providerStore.list('claude'),
+          selectedProfileId: currentSettings.providerProfileByAgent.claude,
+          onSelect: (profileId, model) => {
+            if (this.running || this.preparingMessage) return;
+            void this.selectProfile(profileId, model).then(() => this.contentEl.querySelector<HTMLElement>('.wesight-profile-selector .wesight-model-btn')?.focus());
+          },
+          onManage: () => this.deps.openSettings(),
+          onClose: () => { this.disposeProviderPicker = undefined; },
+        });
+      };
+      button.onkeydown = event => {
+        if (['Enter', ' ', 'ArrowDown'].includes(event.key)) { event.preventDefault(); button.click(); }
+        if (event.key === 'Escape') { this.closeAllDropdowns(); button.focus(); }
+      };
+      return;
+    }
     this.setupDropdown(selector, button);
 
     const settings = this.deps.getSettings();
@@ -2564,7 +2605,7 @@ export class WeSightChatView extends ItemView {
     }
     if (!selectedProfile) return 'Configure model';
     const model = selectedProfile.defaultModel || selectedProfile.model || '未设置模型';
-    return model || selectedProfile.name;
+    return isOpenLuxProfile(selectedProfile) ? profileCatalog(selectedProfile).find(item => item.id === model)?.name || model : model;
   }
 
   private async updateSuggestions(): Promise<void> {

@@ -14,6 +14,7 @@ import { AgentAdapter } from './adapter';
 import { mergeEnvironment } from '../utils/env';
 import { CodexAppServerRuntime } from './codexRuntime';
 import { isTokenDanceProfile, type TokenDanceService } from '../tokendance/service';
+import { isOpenLuxProfile, type OpenLuxService } from '../openlux/service';
 import type { MemberAiService } from '../memberAi/service';
 
 export type RuntimeEventListener = (event: RuntimeTurnEvent) => void;
@@ -30,6 +31,7 @@ export class RuntimeManager {
     private getSettings: () => WeSightObsidianSettings,
     private readonly tokenDance?: TokenDanceService,
     private readonly memberAi?: MemberAiService,
+    private readonly openLux?: OpenLuxService,
   ) {}
 
   resolveStatus(request: ChatTurnRequest): AgentStatus {
@@ -187,12 +189,25 @@ export class RuntimeManager {
       this.cooldownByProfile.delete(profile.id);
     }
     let runtimeProfile = profile;
+    let releaseProvider: (() => void) | undefined;
     if (request.configSource === 'wesightManaged') {
       try {
         if(request.agentId!=='claude'||!this.memberAi)throw new Error('会员模型仅支持 Claude Code。');
         runtimeProfile=await this.memberAi.runtimeProfile(request.model||settings.memberAiModel);
       }catch(error){deliver({type:'error',message:error instanceof Error?error.message:'会员模型不可用'});deliver({type:'done'});return;}
       if(request.signal?.aborted){deliver({type:'done'});return;}
+    } else if (isOpenLuxProfile(profile)) {
+      try {
+        if (!this.openLux || request.agentId !== 'claude') throw new Error('OpenLux 当前仅支持 Claude Code。');
+        const lease = await this.openLux.acquire(profile!, request.signal);
+        runtimeProfile = lease.profile;
+        releaseProvider = lease.release;
+      } catch (error) {
+        deliver({ type: 'error', message: error instanceof Error ? error.message : 'OpenLux 连接失败。', providerProfileId: profile?.id });
+        deliver({ type: 'done' });
+        return;
+      }
+      if (request.signal?.aborted) { releaseProvider?.(); deliver({ type: 'done' }); return; }
     } else if (isTokenDanceProfile(profile)) {
       try {
         if (!this.tokenDance || request.agentId !== 'claude') throw new Error('TokenDance 请通过 Claude 模型设置连接。');
@@ -240,6 +255,7 @@ export class RuntimeManager {
       request.signal?.removeEventListener('abort', cancelAdapter);
       unsubscribe();
       this.activeAdapters.delete(adapter);
+      releaseProvider?.();
     }
   }
 
@@ -252,6 +268,7 @@ export class RuntimeManager {
 
   async shutdown(): Promise<void> {
     this.cancel();
+    this.openLux?.close();
     await this.codexRuntime.shutdown();
   }
 

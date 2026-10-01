@@ -29,6 +29,12 @@ Install [WeSight Publish Assistant 1.0.0 or later](https://github.com/freestylef
 
 The task panel supports status, editor links, login recovery, and retries. All workflows stop at an editable draft: **you perform the final Publish action**. The existing WeChat draft service continues separately.
 
+### OpenLux and grouped model selection (1.2.0)
+
+Claude Code also supports [OpenLux](docs/openlux.md), listed immediately after TokenDance. Enter an API key, fetch your account’s chat models, and choose a default. OpenLux models are grouped by manufacturer in settings and the two-column chat picker, with search and collapsible groups.
+
+See the [1.2.0 release notes](docs/releases/1.2.0.md) for setup, compatibility, and validation details.
+
 ### Member models and usage (1.1.0)
 
 Claude Code supports WeSight member models through the recommended configuration, or a personal TokenDance connection. The account menu shows the remaining weekly allowance next to **使用情况** and opens the web dashboard with model usage and reset times. Existing installations retain their selected configuration; model availability follows the account's current entitlement.

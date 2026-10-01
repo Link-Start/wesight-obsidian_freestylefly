@@ -1,3 +1,7 @@
+import { OPEN_LUX } from '../openlux/constants';
+import { isOpenLuxProfile, type OpenLuxService } from '../openlux/service';
+import { renderOpenLuxSettings } from './openLuxSettings';
+import { renderModelIcon } from './modelIcons';
 import { App, Notice, Plugin, PluginSettingTab, Setting, setIcon } from 'obsidian';
 
 import { AGENT_IDS, getAgentDescriptor } from '../agents';
@@ -38,6 +42,7 @@ interface SettingsTabDeps {
   memberAi: MemberAiService;
   claudeInstaller: ClaudeInstaller;
   tokenDance: TokenDanceService;
+  openLux: OpenLuxService;
   getSettings: () => WeSightObsidianSettings;
   saveSettings: () => Promise<void>;
   providerStore: ProviderStore;
@@ -78,6 +83,7 @@ interface ProviderPreset {
   models: ProviderModelPreset[];
   anthropicAuthMode?: AnthropicAuthMode;
   apiKeyUrl?: string;
+  agentIds?: AgentId[];
 }
 
 const PROVIDER_PRESETS: ProviderPreset[] = [
@@ -90,6 +96,17 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
     baseUrls: { anthropic: TOKEN_DANCE.baseUrl, openai: '' },
     models: TOKEN_DANCE_MODELS,
     anthropicAuthMode: 'authToken',
+  },
+  {
+    key: OPEN_LUX.key,
+    label: OPEN_LUX.name,
+    iconText: 'L',
+    accent: '#ea7900',
+    defaultApiFormat: 'openai',
+    baseUrls: { anthropic: '', openai: OPEN_LUX.baseUrl },
+    models: [],
+    apiKeyUrl: OPEN_LUX.website,
+    agentIds: ['claude'],
   },
   {
     key: 'openai',
@@ -240,6 +257,7 @@ export class WeSightSettingTab extends PluginSettingTab {
   private activeTab: SettingsTabId = 'general';
   private selectedProviderKey = 'tokendance';
   private disposeMemberCard?: () => void;
+  private disposeOpenLux?: () => void;
   private readonly publishingSettings: WeChatPublishingSettings;
   private knowledgeStatusListener: ((event: { message?: string }) => void) | null = null;
 
@@ -271,6 +289,7 @@ export class WeSightSettingTab extends PluginSettingTab {
 
   override display(): void {
     this.disposeMemberCard?.();this.disposeMemberCard=undefined;
+    this.disposeOpenLux?.(); this.disposeOpenLux = undefined;
     if (this.knowledgeStatusListener) {
       this.deps.knowledgeBrain.off('status', this.knowledgeStatusListener);
       this.knowledgeStatusListener = null;
@@ -294,6 +313,7 @@ export class WeSightSettingTab extends PluginSettingTab {
 
   override hide(): void {
     this.disposeMemberCard?.();this.disposeMemberCard=undefined;
+    this.disposeOpenLux?.(); this.disposeOpenLux = undefined;
     if (this.knowledgeStatusListener) {
       this.deps.knowledgeBrain.off('status', this.knowledgeStatusListener);
       this.knowledgeStatusListener = null;
@@ -634,7 +654,7 @@ export class WeSightSettingTab extends PluginSettingTab {
 
   private renderProviderConsole(section: HTMLElement, agentFilter?: AgentId): void {
     const visiblePresets = agentFilter
-      ? PROVIDER_PRESETS.filter(preset => Boolean(preset.baseUrls[providerFormatForAgent(agentFilter)]))
+      ? PROVIDER_PRESETS.filter(preset => preset.agentIds ? preset.agentIds.includes(agentFilter) : Boolean(preset.baseUrls[providerFormatForAgent(agentFilter)]))
       : [...PROVIDER_PRESETS];
     if (!visiblePresets.some(preset => preset.key === this.selectedProviderKey)) {
       this.selectedProviderKey = visiblePresets[0]?.key ?? PROVIDER_PRESETS[0].key;
@@ -678,12 +698,35 @@ export class WeSightSettingTab extends PluginSettingTab {
       };
       const icon = row.createSpan({ cls: 'wesight-provider-icon', text: item.iconText });
       icon.style.setProperty('--provider-accent', item.accent);
+      if (item.key === OPEN_LUX.key) { icon.empty(); renderModelIcon(icon, OPEN_LUX.key); }
       row.createSpan({ cls: 'wesight-provider-name', text: item.label });
       const toggle = row.createSpan({ cls: 'wesight-provider-toggle' });
       toggle.createSpan();
     }
 
     const detail = consoleEl.createDiv({ cls: 'wesight-provider-detail' });
+    if (preset.key === OPEN_LUX.key) {
+      const existing = this.deps.providerStore.list('claude').find(isOpenLuxProfile) ?? null;
+      this.disposeOpenLux = renderOpenLuxSettings(detail, {
+        service: this.deps.openLux, profile: existing, onCancel: () => this.display(),
+        onSave: async config => {
+          const profile = this.deps.providerStore.save({
+            id: existing?.id, agentId: 'claude', providerKey: OPEN_LUX.key, name: OPEN_LUX.name,
+            apiKey: config.apiKey, baseUrl: config.baseUrl, defaultModel: config.defaultModel,
+            models: config.models.map(model => model.id), modelCatalog: config.models,
+            wireApi: 'chat', anthropicAuthMode: 'authToken', isDefault: true,
+          });
+          const settings = this.deps.getSettings();
+          settings.providerProfileByAgent.claude = profile.id;
+          settings.configSources.claude = 'providerProfile';
+          await this.deps.saveSettings();
+          this.deps.refreshViews();
+          new Notice('OpenLux 已保存为 Claude Code 默认供应商。');
+          this.display();
+        },
+      });
+      return;
+    }
     if (preset.key === 'tokendance') {
       renderTokenDanceSettings(detail, {
         service: this.deps.tokenDance,

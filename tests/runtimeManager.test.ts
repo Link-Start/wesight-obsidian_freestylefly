@@ -5,6 +5,7 @@ import { setTimeout as delay } from 'timers/promises';
 
 import { invalidateRuntimeDiscoveryCache } from '../src/runtime/discovery';
 import { RuntimeManager } from '../src/runtime/runtimeManager';
+import { OpenLuxService } from '../src/openlux/service';
 import type { ProviderStore } from '../src/storage/providerStore';
 import {
   DEFAULT_SETTINGS,
@@ -72,6 +73,33 @@ describe('RuntimeManager provider safeguards', () => {
     else process.env.WESIGHT_HOME = previousWesightHome;
     invalidateRuntimeDiscoveryCache();
     fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  test.each([0, 1])('OpenLux runtime uses local credentials and releases them after CLI exit %s', async exitCode => {
+    const binaryPath = path.join(tempDir, 'fake-claude');
+    fs.writeFileSync(binaryPath, [
+      '#!/usr/bin/env node',
+      "process.stdin.resume(); process.stdin.on('end', () => {",
+      "process.stdout.write(JSON.stringify({type:'assistant',message:{content:[{type:'text',text:process.env.ANTHROPIC_AUTH_TOKEN}]}})+'\\n');",
+      `process.exitCode=${exitCode}; });`,
+    ].join('\n'));
+    fs.chmodSync(binaryPath, 0o755);
+    const profile = { ...makeProfile('real-upstream-key'), name: 'OpenLux', providerKey: 'openlux', baseUrl: 'https://api.openlux.ai/v1' };
+    const providerStore = { find: () => profile } as unknown as ProviderStore;
+    const service = new OpenLuxService();
+    const acquire = vi.spyOn(service, 'acquire');
+    const manager = new RuntimeManager(providerStore, () => makeSettings(binaryPath), undefined, undefined, service);
+    const events: RuntimeTurnEvent[] = [];
+    try {
+      await manager.runTurn(request, event => events.push(event));
+      expect(acquire).toHaveBeenCalledOnce();
+      const lease = await acquire.mock.results[0].value as Awaited<ReturnType<OpenLuxService['acquire']>>;
+      const text = events.filter(event => event.type === 'text').map(event => event.type === 'text' ? event.content : '').join('');
+      expect(text).toContain(lease.profile.apiKey);
+      expect(text).not.toContain('real-upstream-key');
+      const result = await fetch(`${lease.profile.baseUrl}/v1/messages`, { method: 'POST', headers: { Authorization: `Bearer ${lease.profile.apiKey}` }, body: '{}' });
+      expect(result.status).toBe(401);
+    } finally { await manager.shutdown(); }
   });
 
   test('blocks a remote provider with an empty key before Claude starts', async () => {

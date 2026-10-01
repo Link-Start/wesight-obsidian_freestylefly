@@ -1,3 +1,4 @@
+import type { CatalogModel } from './openlux/catalog';
 import type { WeChatThemeId } from './wechat/themes';
 import type { MultiPlatformId, MultiPublishPairing } from './multiPublish/types';
 
@@ -46,6 +47,8 @@ export interface AgentStatus {
 }
 
 export interface ProviderProfile {
+  providerKey?: string;
+  modelCatalog?: CatalogModel[];
   id: string;
   agentId: AgentId;
   name: string;
