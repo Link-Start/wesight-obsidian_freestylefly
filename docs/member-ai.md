@@ -19,7 +19,7 @@
 
 配置字段：configSources.claude=wesightManaged、memberAiModel（空值跟随云端默认）、memberAiConsentUserId（当前告知已确认的用户）。StoredConversation.managedModel 在首次发送前固定模型；管理员修改默认模型不会改写进行中的会话，用户可以主动切换。
 
-插件不保存上游平台 Key。回环仅绑定 127.0.0.1 随机端口，临时凭据在内存中；WeSight 登录令牌由已有登录服务保管，仅发往固定 https://api.wesight.ai 和 https://ai-gateway.wesight.ai。账户变更会中断请求并轮换本机 token。登录凭据、平台 Key 不进入 Claude 子进程环境或供应商导出配置。
+插件不保存上游平台 Key。回环仅绑定 127.0.0.1 随机端口，临时凭据在内存中；WeSight 登录令牌由已有登录服务保管，仅发往固定 https://api.wesight.ai 和 https://ai-gateway.canghecode.com。账户变更会中断请求并轮换本机 token。登录凭据、平台 Key 不进入 Claude 子进程环境或供应商导出配置。
 
 ## 模型与额度
 

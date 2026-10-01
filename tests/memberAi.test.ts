@@ -15,7 +15,7 @@ const ready: MemberAiStatus = {
   models: [{ id: 'deepseek-v4.1-flash', name: 'DeepSeek Flash' }],
   defaultModel: 'deepseek-v4.1-flash',
   quota: { remainingPercent: 100, resetsAt: null },
-  gatewayUrl: 'https://ai-gateway.wesight.ai',
+  gatewayUrl: 'https://ai-gateway.canghecode.com',
 };
 const services: MemberAiService[] = [];
 afterEach(() => {
@@ -82,13 +82,13 @@ describe('member configuration migration', () => {
   it('accepts only the exact TLS gateway origin', () => {
     expect(memberGatewayUrl(ready.gatewayUrl)).toBe(ready.gatewayUrl);
     for (const value of [
-      'http://ai-gateway.wesight.ai',
+      'http://ai-gateway.canghecode.com',
       'https://evil.example',
-      'https://ai-gateway.wesight.ai.evil.example',
-      'https://key@ai-gateway.wesight.ai',
-      'https://ai-gateway.wesight.ai/v1',
-      'https://ai-gateway.wesight.ai?key=x',
-      'https://ai-gateway.wesight.ai:444',
+      'https://ai-gateway.canghecode.com.evil.example',
+      'https://key@ai-gateway.canghecode.com',
+      'https://ai-gateway.canghecode.com/v1',
+      'https://ai-gateway.canghecode.com?key=x',
+      'https://ai-gateway.canghecode.com:444',
     ]) {
       expect(() => memberGatewayUrl(value)).toThrow();
     }

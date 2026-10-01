@@ -20,7 +20,7 @@ export function memberGatewayUrl(value: unknown): string {
   const url = new URL(value);
   if (
     url.protocol !== 'https:' ||
-    url.hostname !== 'ai-gateway.wesight.ai' ||
+    url.hostname !== 'ai-gateway.canghecode.com' ||
     url.username ||
     url.password ||
     url.port ||

@@ -51,7 +51,8 @@ export function renderMemberAiCard(
     if (status.state === 'login-required') action('登录 WeSight', () => deps.auth.startLogin());
     if (status.state === 'membership-required' || status.state === 'expired')
       action(status.state === 'expired' ? '续费会员' : '开通会员', () => deps.auth.openBilling());
-    if (status.membership.active) {
+    // Quota is only meaningful once the service is open; 'unavailable' reports 0% with no budget.
+    if (status.membership.active && (status.state === 'ready' || status.state === 'quota-exhausted')) {
       const percent = Math.max(0, Math.min(100, status.quota.remainingPercent));
       card.createEl('p', { text: `本周剩余 ${percent}% · 会员有效` });
       card.createEl('progress', { attr: { max: '100', value: String(percent), 'aria-label': '会员 AI 本周剩余额度' } });

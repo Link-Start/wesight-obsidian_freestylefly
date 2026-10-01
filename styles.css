@@ -9731,5 +9731,16 @@ body.theme-dark .wesight-wechat-publish-button {
 .wesight-member-ai-card h4 { margin: 0 0 8px; }
 .wesight-member-ai-card p { margin: 6px 0; }
 .wesight-member-ai-card button { margin: 4px 6px 4px 0; }
-.wesight-member-ai-card progress { width: 100%; accent-color: var(--interactive-accent); }
+.wesight-member-ai-card progress {
+  width: 100%;
+  height: 6px;
+  border: none;
+  border-radius: 3px;
+  overflow: hidden;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--background-modifier-border);
+}
+.wesight-member-ai-card progress::-webkit-progress-bar { background: var(--background-modifier-border); }
+.wesight-member-ai-card progress::-webkit-progress-value { background: var(--interactive-accent); border-radius: 3px; }
 .wesight-member-ai-card select { max-width: 100%; }

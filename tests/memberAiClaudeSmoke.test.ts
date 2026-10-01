@@ -106,7 +106,7 @@ test.skipIf(!process.env.WESIGHT_TEST_CLAUDE_BINARY)(
                     quota: { remainingPercent: 100, resetsAt: null },
                     models: [{ id: 'deepseek-v4.1-flash', name: 'Flash' }],
                     defaultModel: 'deepseek-v4.1-flash',
-                    gatewayUrl: 'https://ai-gateway.wesight.ai',
+                    gatewayUrl: 'https://ai-gateway.canghecode.com',
                   },
                 }),
               ),
