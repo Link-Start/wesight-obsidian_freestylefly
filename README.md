@@ -43,6 +43,8 @@ See the [1.1.0 release notes](docs/releases/1.1.0.md) for the complete Chinese u
 
 ### Local agent chat
 
+The [1.2.1 patch](docs/releases/1.2.1.md) fixes duplicated Claude Code replies and thinking content while preserving live streaming.
+
 1. Open **Settings → WeSight** and select Claude Code, Codex, or OpenCode.
 2. Confirm that WeSight detects the CLI, or enter its executable path.
 3. Open the WeSight sidebar from the ribbon or command palette.
