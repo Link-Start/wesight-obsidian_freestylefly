@@ -3,6 +3,7 @@ import os from 'os';
 import path from 'path';
 
 import { RuntimeDiscovery } from '../src/runtime/discovery';
+import * as commandUtils from '../src/utils/command';
 
 function makeExecutable(filePath: string, content = '#!/bin/sh\necho test\n'): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -17,6 +18,7 @@ describe('RuntimeDiscovery', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -89,6 +91,9 @@ describe('RuntimeDiscovery', () => {
   });
 
   test('reports missing without installing', () => {
+    // Simulate an absent CLI even when the developer has OpenCode installed
+    // in one of the discovery service's fallback search directories.
+    vi.spyOn(commandUtils, 'resolveCommand').mockReturnValue(null);
     const discovery = new RuntimeDiscovery({
       env: { WESIGHT_HOME: tempDir, PATH: '' },
     });

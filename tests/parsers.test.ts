@@ -1,4 +1,91 @@
-import { parseClaudeStreamLine, parseCodexStreamLine, parseOpenCodeStreamLine } from '../src/runtime/parsers';
+import { createClaudeStreamParser, parseClaudeStreamLine, parseCodexStreamLine, parseOpenCodeStreamLine } from '../src/runtime/parsers';
+
+describe('Claude turn stream reconciliation', () => {
+  const start = (id: string) => ({
+    type: 'stream_event', event: { type: 'message_start', message: { id } },
+  });
+  const delta = (type: 'text' | 'thinking', value: string) => ({
+    type: 'stream_event',
+    event: { type: 'content_block_delta', delta: { type: `${type}_delta`, [type]: value } },
+  });
+  const snapshot = (id: string, text: string, thinking?: string) => ({
+    type: 'assistant',
+    message: {
+      id, role: 'assistant',
+      content: [
+        ...(thinking ? [{ type: 'thinking', thinking }] : []),
+        { type: 'text', text },
+      ],
+    },
+  });
+  const parseSequence = (records: unknown[]) => {
+    const parse = createClaudeStreamParser();
+    return records.flatMap(record => parse(JSON.stringify(record)));
+  };
+
+  test('emits streamed text and thinking once when the assistant snapshot arrives', () => {
+    expect(parseSequence([
+      start('m1'), delta('thinking', '分析'), delta('text', '你好'),
+      delta('text', ' '), delta('text', '世界'),
+      snapshot('m1', '你好 世界', '分析'),
+      { type: 'result', subtype: 'success', result: '你好 世界' },
+    ])).toEqual([
+      { type: 'reasoning', content: '分析' },
+      { type: 'text', content: '你好' },
+      { type: 'text', content: ' ' },
+      { type: 'text', content: '世界' },
+    ]);
+  });
+
+  test('recovers unstreamed text and thinking from the snapshot', () => {
+    expect(parseSequence([
+      start('m1'), delta('text', 'hello'), snapshot('m1', 'hello world', 'plan'),
+    ])).toEqual([
+      { type: 'text', content: 'hello' },
+      { type: 'reasoning', content: 'plan' },
+      { type: 'text', content: ' world' },
+    ]);
+  });
+
+  test('preserves repeated deltas and identical text in separate messages', () => {
+    expect(parseSequence([
+      start('m1'), delta('text', 'ha'), delta('text', 'ha'), snapshot('m1', 'haha'),
+      start('m2'), delta('text', 'haha'), snapshot('m2', 'haha'),
+      snapshot('m3', 'haha'),
+    ])).toEqual([
+      { type: 'text', content: 'ha' }, { type: 'text', content: 'ha' },
+      { type: 'text', content: 'haha' }, { type: 'text', content: 'haha' },
+    ]);
+  });
+
+  test('handles complete messages without partial events and ignores snapshot replays by ID', () => {
+    expect(parseSequence([
+      snapshot('m1', 'hello'), snapshot('m1', 'hello'), snapshot('m2', 'hello'),
+    ])).toEqual([{ type: 'text', content: 'hello' }, { type: 'text', content: 'hello' }]);
+  });
+
+  test('reconciles separate block snapshots sharing a message ID', () => {
+    expect(parseSequence([
+      start('m1'), delta('text', 'first'), snapshot('m1', 'first'),
+      delta('text', 'second'), snapshot('m1', 'second'), snapshot('m1', 'second'),
+      delta('text', 'second'), snapshot('m1', 'second'),
+      snapshot('m1', 'firstsecondsecond'),
+    ])).toEqual([
+      { type: 'text', content: 'first' },
+      { type: 'text', content: 'second' },
+      { type: 'text', content: 'second' },
+    ]);
+  });
+
+  test('keeps separate parser instances independent', () => {
+    const first = createClaudeStreamParser();
+    const second = createClaudeStreamParser();
+    first(JSON.stringify(start('m1')));
+    first(JSON.stringify(delta('text', 'hello')));
+    expect(first(JSON.stringify(snapshot('m1', 'hello')))).toEqual([]);
+    expect(second(JSON.stringify(snapshot('m1', 'hello')))).toEqual([{ type: 'text', content: 'hello' }]);
+  });
+});
 
 describe('stream parsers', () => {
   test('parses Claude assistant message content arrays', () => {

@@ -7,7 +7,7 @@ import { appendAttachmentContext } from './attachmentContext';
 import { prepareProviderProjection } from './providerProjection';
 import { managedProjection } from '../memberAi/projection';
 import {
-  parseClaudeStreamLine,
+  createClaudeStreamParser,
   parseOpenCodeStreamLine,
 } from './parsers';
 import {
@@ -29,12 +29,14 @@ export class AgentAdapter extends EventEmitter {
   private cancelled = false;
   private pendingTerminalError: Extract<RuntimeTurnEvent, { type: 'error' }> | null = null;
   private terminalErrorTimer: number | null = null;
+  private parseClaudeLine = createClaudeStreamParser();
 
   constructor(private readonly options: AgentAdapterOptions) {
     super();
   }
 
   run(request: ChatTurnRequest): Promise<void> {
+    this.parseClaudeLine = createClaudeStreamParser();
     this.terminalErrorEmitted = false;
     this.cancelled = false;
     this.clearPendingTerminalError();
@@ -248,7 +250,7 @@ export class AgentAdapter extends EventEmitter {
 
   private emitParsed(line: string): void {
     const events = this.options.agentId === 'claude'
-      ? parseClaudeStreamLine(line)
+      ? this.parseClaudeLine(line)
       : parseOpenCodeStreamLine(line);
     for (const event of events) {
       if (event.type === 'error') {

@@ -47,6 +47,38 @@ describe('AgentAdapter Claude provider failures', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
+  test('delivers Claude partial output once and resets reconciliation for each run', async () => {
+    const binaryPath = path.join(tempDir, 'fake-claude-stream');
+    const records = [
+      { type: 'stream_event', event: { type: 'message_start', message: { id: 'm1' } } },
+      { type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'thinking_delta', thinking: 'plan' } } },
+      { type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: 'hello' } } },
+      { type: 'assistant', session_id: 's1', message: { id: 'm1', content: [
+        { type: 'thinking', thinking: 'plan' }, { type: 'text', text: 'hello' },
+      ] } },
+      { type: 'result', subtype: 'success', result: 'hello' },
+    ];
+    fs.writeFileSync(binaryPath, [
+      '#!/bin/sh', 'cat >/dev/null', "cat <<'STREAM'",
+      ...records.map(record => JSON.stringify(record)), 'STREAM',
+    ].join('\n'));
+    fs.chmodSync(binaryPath, 0o755);
+    const adapter = new AgentAdapter({
+      agentId: 'claude', binaryPath, sharedEnvironmentVariables: '', providerProfile: null,
+    });
+    const events: RuntimeTurnEvent[] = [];
+    adapter.onRuntimeEvent(event => events.push(event));
+
+    for (let turn = 0; turn < 2; turn++) {
+      events.length = 0;
+      await adapter.run({ ...request, configSource: 'localCli' });
+      expect(events).toEqual([
+        { type: 'reasoning', content: 'plan' }, { type: 'text', content: 'hello' },
+        { type: 'session', sessionId: 's1' }, { type: 'done' },
+      ]);
+    }
+  });
+
   test('emits one structured 429 error and stops a waiting Claude process', async () => {
     const binaryPath = path.join(tempDir, 'fake-claude');
     fs.writeFileSync(binaryPath, [

@@ -60,6 +60,71 @@ function contentArrayReasoning(content: unknown): string | null {
   return parts.length ? parts.join('') : null;
 }
 
+/** One parser per turn: Claude sends both deltas and complete assistant snapshots. */
+export function createClaudeStreamParser(): (line: string) => RuntimeTurnEvent[] {
+  type Channel = { emitted: string; pending: string; snapshot: string | null };
+  type Output = { text: Channel; reasoning: Channel };
+  const newOutput = (): Output => ({
+    text: { emitted: '', pending: '', snapshot: null },
+    reasoning: { emitted: '', pending: '', snapshot: null },
+  });
+  const messages = new Map<string, Output>();
+  let active: Output | null = null;
+  let activeId: string | null = null;
+
+  return line => {
+    const parsed = parseJson(line);
+    const nested = parsed && isRecord(parsed.event) ? parsed.event : null;
+    const message = parsed && isRecord(parsed.message) ? parsed.message : null;
+    if (nested?.type === 'message_start') {
+      const started = isRecord(nested.message) ? nested.message : null;
+      const id = firstString(started?.id);
+      activeId = id;
+      active = newOutput();
+      if (id) messages.set(id, active);
+    }
+
+    const snapshot = message && (parsed?.type === 'assistant' || message.role === 'assistant');
+    if (snapshot) {
+      const id = firstString(message.id);
+      active = (id ? messages.get(id) : null)
+        ?? (id && activeId && id !== activeId ? null : active)
+        ?? newOutput();
+      activeId = id;
+      if (id) messages.set(id, active);
+    }
+
+    const output = active ?? newOutput();
+    const events: RuntimeTurnEvent[] = [];
+    for (const event of parseClaudeStreamLine(line)) {
+      if (event.type !== 'text' && event.type !== 'reasoning') {
+        events.push(event);
+        continue;
+      }
+      const channel = output[event.type];
+      // Snapshots repeat the streamed prefix; only emit a missing tail. Keep
+      // deltas verbatim, including legitimately repeated words and whitespace.
+      let content = event.content;
+      if (snapshot) {
+        if (content.startsWith(channel.emitted)) content = content.slice(channel.emitted.length);
+        // Some CLI versions emit one assistant snapshot per completed block.
+        else if (channel.pending && content.startsWith(channel.pending)) content = content.slice(channel.pending.length);
+        else if (!channel.pending && content === channel.snapshot) content = '';
+        channel.pending = '';
+        channel.snapshot = event.content;
+      } else channel.pending += content;
+      channel.emitted += content;
+      if (content) events.push({ ...event, content });
+    }
+    if (!snapshot || firstString(message?.id)) active = output;
+    else {
+      active = null;
+      activeId = null;
+    }
+    return events;
+  };
+}
+
 export function parseClaudeStreamLine(line: string): RuntimeTurnEvent[] {
   const events: RuntimeTurnEvent[] = [];
   const parsed = parseJson(line);
